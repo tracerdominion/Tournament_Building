@@ -135,11 +135,9 @@ function onFormSubmit() {
       switch (stages[i].type.toLowerCase()) {
         case 'single':
         case 'single elimination':
-          sendResultToDiscord('Bracket');
           updateSingleBracket(i);
           break;
         case 'swiss':
-          sendResultToDiscord('Standings');
           updateSwiss(i);
       }
     }
@@ -157,7 +155,7 @@ function sendResultToDiscord(displayType) {
   if (mostRecent[5]) {
     display += '\n' + mostRecent[5];
   }
-  display += '\n\n**[Current ' + displayType + '](' + admin[1][1] + ')**';
+  display += '\n**[Current ' + displayType + '](' + admin[1][1] + ')**';
   
   var scoreEmbed = {
     "method": "post",
@@ -191,7 +189,7 @@ function sendResultToDiscord(displayType) {
 
 function singleBracketOptions(stage) {
   return [
-    ["'" + stages[stage].name + "' Single Elimination Options", ""],
+    ["''" + stages[stage].name + "' Single Elimination Options", ""],
     ["Seeding Sheet", ""],
     ["Number of Players", ""],
     ["Games to Win", ""],
@@ -295,7 +293,10 @@ function updateSingleBracket(stage) {
         break;
       }
     }
-    if (found) {break;}
+    if (found) {
+	  sendResultToDiscord('Bracket');
+	  break;
+	}
   }
 }
 
@@ -303,7 +304,7 @@ function updateSingleBracket(stage) {
 
 function swissOptions(stage) {
   return [
-    ["'" + stages[stage].name + "' Swiss Options", ""],
+    ["''" + stages[stage].name + "' Swiss Options", ""],
     ["Seeding Sheet", ""],
     ["Number of Players", ""],
     ["Number of Rounds", ""],
@@ -387,12 +388,14 @@ function updateSwiss(stage) {
       swiss.getRange(i+2, 7, 1, 2).setValues([[leftwins, rightwins]]);
       processing.appendRow([mostRecent[1], mostRecent[3], mostRecent[2], mostRecent[4]]);
       processing.appendRow([mostRecent[3], mostRecent[1], mostRecent[4], mostRecent[2]]);
+	  sendResultToDiscord('Standings');
     } else if ((roundMatches[i][0] == mostRecent[3]) && (roundMatches[i][3] == mostRecent[1])) {
       let leftwins = Number(roundMatches[i][1]) + Number(mostRecent[4]);
       let rightwins = Number(roundMatches[i][2]) + Number(mostRecent[2]);
       swiss.getRange(i+2, 7, 1, 2).setValues([[leftwins, rightwins]]);
       processing.appendRow([mostRecent[1], mostRecent[3], mostRecent[2], mostRecent[4]]);
       processing.appendRow([mostRecent[3], mostRecent[1], mostRecent[4], mostRecent[2]]);
+	  sendResultToDiscord('Standings');
     }
   }
   
