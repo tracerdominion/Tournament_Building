@@ -1,8 +1,8 @@
 // A name and type for each stage, ie [{name: 'Swiss', type: 'swiss}, {name: 'Elimination', type: 'single'}]
-var stages = [];
+var stages = [{name: 'Single', type: 'single'}];
 
 // The sheet that contains the player list in its second column
-var playerListSheet = '';
+var playerListSheet = 'Player List';
 
 function setupInitial() { 
   adminSetup();
@@ -48,8 +48,7 @@ function testWebhook() {
       ]
     })
   };
-  
-  
+   
   UrlFetchApp.fetch(webhook, testMessage);
 }
 
@@ -185,6 +184,13 @@ function sendResultToDiscord(displayType) {
   UrlFetchApp.fetch(webhook, matchCommand);
 }
 
+function shuffle(arr, start=0, end=arr.length-1) {
+  for(let i=end-start; i>0; i--) {
+    let toend = Math.floor(Math.random()*(i+1) + start);
+    [arr[i+start],arr[toend]] = [arr[toend], arr[i+start]];
+  }
+}
+
 //Single Elimination functions
 
 function singleBracketOptions(stage) {
@@ -225,16 +231,38 @@ function createSingleBracket(stage) {
   }
   
   //seed numbers and players
+  var seedList = Array.from({length: options[2][1]}, (v, i) => (i+1));
+  var seedMethod = options[4][1].toLowerCase();
+  switch (seedMethod) {
+    case 'random':
+      shuffle(seedList);
+      Logger.log(seedList);
+      break;
+    case 'tennis':
+      let lastWithBye = 2**nround - options[2][1];
+      let splitRound = lastWithBye ? Math.ceil(Math.log(lastWithBye)/Math.log(2)) : -1;
+      shuffle(seedList, 2**(nround-1));      
+      for (let i=nround-1; i>1; i--) {
+        if (i == splitRound) {
+          shuffle(seedList, 2**(i-1), lastWithBye - 1);
+          shuffle(seedList, lastWithBye, 2**i - 1);
+        } else {
+          shuffle(seedList, 2**(i-1), 2**i - 1);
+        }
+      }
+      break;
+  }
+  
   function placeSeeds(seed, location, roundsLeft) {
     
     if (2**nround + 1 - seed <= Number(options[2][1])) {
-      bracket.getRange(location, 1).setValue(seed);
-      bracket.getRange(location, 2).setFormula("='" + options[1][1] + "'!B" + (seed + 1));
-      bracket.getRange(location + 2, 1).setValue(2**nround + 1 - seed);
-      bracket.getRange(location + 2, 2).setFormula("='" + options[1][1] + "'!B" + (2**nround + 1 - seed + 1));
+      if (seedMethod != 'random') {bracket.getRange(location, 1).setValue(seedList[seed-1]);}
+      bracket.getRange(location, 2).setFormula("='" + options[1][1] + "'!B" + (seedList[seed-1] + 1));
+      if (seedMethod != 'random') {bracket.getRange(location + 2, 1).setValue(seedList[2**nround - seed]);}
+      bracket.getRange(location + 2, 2).setFormula("='" + options[1][1] + "'!B" + (seedList[2**nround - seed] + 1));
     } else {
-      bracket.getRange(location + 1, 3).setValue(seed);
-      bracket.getRange(location + 1, 4).setFormula("='" + options[1][1] + "'!B" + (seed + 1));
+      if (seedMethod != 'random') {bracket.getRange(location + 1, 3).setValue(seedList[seed-1]);}
+      bracket.getRange(location + 1, 4).setFormula("='" + options[1][1] + "'!B" + (seedList[seed-1] + 1));
       bracket.getRange(location, 2, 1, 2).setBorder(false, false, false, false, null, null);
       bracket.getRange(location + 2, 2, 1, 2).setBorder(false, false, false, false, null, null);
     }
@@ -294,9 +322,9 @@ function updateSingleBracket(stage) {
       }
     }
     if (found) {
-	  sendResultToDiscord('Bracket');
-	  break;
-	}
+      sendResultToDiscord('Bracket');
+      break;
+    }
   }
 }
 
@@ -349,14 +377,24 @@ function createSwiss(stage) {
     players.splice(byeplace, 0, 'BYE');
   }
   var halfplayers = players.length/2;
+  switch (options[5][1].toLowerCase()) {
+    case 'random':
+      shuffle(players);
+      if (byeplace) {byeplace = players.indexOf('BYE');}
+      break;
+    case 'highlow':
+      players = players.slice(0,halfplayers).concat(players.slice(halfplayers,2*halfplayers).reverse());
+      if (byeplace >= halfplayers) {byeplace = players.indexOf('BYE', halfplayers);}
+      break;
+  }
   var firstround = [['Round', 1, '=SUM(G2:H)/' + (Number(options[4][1]) * halfplayers), '']];
   for (let i = 0; i < halfplayers; i++) {
     if (players[i] == 'BYE') {
-      firstround.push(['BYE', 0, options[4][1], players[halfplayers+i]])
+      firstround.push(['BYE', 0, options[4][1], players[halfplayers+i]]);
     } else if (players[halfplayers + i] == 'BYE') {
-      firstround.push([players[i], options[4][1], 0, 'BYE'])
+      firstround.push([players[i], options[4][1], 0, 'BYE']);
     } else {
-      firstround.push([players[i], '', '', players[halfplayers+i]])
+      firstround.push([players[i], '', '', players[halfplayers+i]]);
     }
     
   }
@@ -388,14 +426,14 @@ function updateSwiss(stage) {
       swiss.getRange(i+2, 7, 1, 2).setValues([[leftwins, rightwins]]);
       processing.appendRow([mostRecent[1], mostRecent[3], mostRecent[2], mostRecent[4]]);
       processing.appendRow([mostRecent[3], mostRecent[1], mostRecent[4], mostRecent[2]]);
-	  sendResultToDiscord('Standings');
+      sendResultToDiscord('Standings');
     } else if ((roundMatches[i][0] == mostRecent[3]) && (roundMatches[i][3] == mostRecent[1])) {
       let leftwins = Number(roundMatches[i][1]) + Number(mostRecent[4]);
       let rightwins = Number(roundMatches[i][2]) + Number(mostRecent[2]);
       swiss.getRange(i+2, 7, 1, 2).setValues([[leftwins, rightwins]]);
       processing.appendRow([mostRecent[1], mostRecent[3], mostRecent[2], mostRecent[4]]);
       processing.appendRow([mostRecent[3], mostRecent[1], mostRecent[4], mostRecent[2]]);
-	  sendResultToDiscord('Standings');
+      sendResultToDiscord('Standings');
     }
   }
   
