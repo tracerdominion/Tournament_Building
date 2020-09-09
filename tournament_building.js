@@ -1,8 +1,8 @@
 // A name and type for each stage, ie [{name: 'Swiss', type: 'swiss}, {name: 'Elimination', type: 'single'}]
-var stages = [{name: 'Swiss', type: 'swiss'}];
+var stages = [];
 
 // The sheet that contains the player list in its second column
-var playerListSheet = 'Player List';
+var playerListSheet = '';
 
 function setupInitial() { 
   adminSetup();
@@ -18,7 +18,12 @@ function setupSheets() {
         createSingleBracket(i);
         break;
       case 'swiss':
+      case 'swiss system':
         createSwiss(i);
+        break;
+      case 'random':
+      case 'preset random':
+        createRandom(i);
     }
   }
 }
@@ -36,10 +41,15 @@ function removeLastResult() {
       updateSingleBracket(lastResultStage, false);
       break;
     case 'swiss':
+    case 'swiss system':
       updateSwiss(lastResultStage, false);
       break;
+    case 'random':
+    case 'preset random':
+      updateRandom(lastResultStage, false);
+      break;
     default:
-      sheet.getSheetByName('Results').deleteRow(results.length);
+      SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Results').deleteRow(results.length);
   }
 }
 
@@ -136,7 +146,12 @@ function addStages() {
         var opts = singleBracketOptions(i);
         break;
       case 'swiss':
+      case 'swiss system':
         var opts = swissOptions(i);
+        break;
+      case 'random':
+      case 'preset random':
+        var opts = randomOptions(i);
     }
     
     options.getRange(1, 1, opts.length, 2).setValues(opts);
@@ -158,13 +173,18 @@ function onFormSubmit() {
           updateSingleBracket(i, true);
           break;
         case 'swiss':
+        case 'swiss system':
           updateSwiss(i, true);
+          break;
+        case 'random':
+        case 'preset random':
+          updateRandom(i, true);
       }
     }
   }
 }
 
-function sendResultToDiscord(displayType) {
+function sendResultToDiscord(displayType, gid) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var admin = sheet.getSheetByName('Administration').getDataRange().getValues();
   var webhook = admin[3][1];
@@ -175,7 +195,7 @@ function sendResultToDiscord(displayType) {
   if (mostRecent[5]) {
     display += '\n' + mostRecent[5];
   }
-  display += '\n**[Current ' + displayType + '](' + admin[1][1] + ')**';
+  display += '\n**[Current ' + displayType + '](' + admin[1][1] + '?gid=' + gid + ')**';
   
   var scoreEmbed = {
     "method": "post",
@@ -245,7 +265,7 @@ function createSingleBracket(stage) {
   //column widths
   for (let j=1; j <= nround*2 + 4; j++) {
     if (j % 2) {
-      bracket.setColumnWidth(j, 40);
+      bracket.setColumnWidth(j, 20);
     } else {
       bracket.setColumnWidth(j, 150);
     }
@@ -351,7 +371,7 @@ function updateSingleBracket(stage, add) {
     if (found) {
       if (add) {
         sheet.getSheetByName('Results').getRange(results.length, 7).setValue(stages[stage].name);
-        sendResultToDiscord('Bracket');
+        sendResultToDiscord('Bracket', bracket.getSheetId());
       } else {
         sheet.getSheetByName('Results').deleteRow(results.length);
       }
@@ -360,7 +380,7 @@ function updateSingleBracket(stage, add) {
   }
 }
 
-//Swiss functions
+//Swiss system functions
 
 function swissOptions(stage) {
   return [
@@ -381,14 +401,19 @@ function createSwiss(stage) {
   swiss.setColumnWidth(2, 150)
   swiss.setColumnWidths(3, 2, 50);
   swiss.setColumnWidth(6, 150);
-  swiss.setColumnWidths(7, 2, 40);
+  swiss.setColumnWidths(7, 2, 20);
   swiss.setColumnWidth(9, 150);
-  swiss.setFrozenColumns(4);
+  swiss.setFrozenColumns(5);
   swiss.setFrozenRows(1);
   swiss.getRange('F1').setHorizontalAlignment('right');
+  swiss.getRange('G1').setHorizontalAlignment('left');
+  swiss.getRange('I:I').setHorizontalAlignment('right');
+  swiss.getRange('H1').setFontColor('#ffffff');
+  swiss.getRange('I:I').setHorizontalAlignment('right');
   swiss.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=ISBLANK(B1)').setFontColor('#FFFFFF').setRanges([swiss.getRange('A:A')]).build()]);
   var processing = sheet.insertSheet(stages[stage].name + ' Processing');
   processing.deleteRows(101, 900);
+  processing.getRange('E1').setValue('-');
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
   var players = sheet.getSheetByName(options[1][1]).getRange('B2:B' + (Number(options[2][1]) + 1)).getValues().flat();
   
@@ -479,7 +504,7 @@ function updateSwiss(stage, add) {
         processing.appendRow([mostRecent[1], mostRecent[3], mostRecent[2], mostRecent[4]]);
         processing.appendRow([mostRecent[3], mostRecent[1], mostRecent[4], mostRecent[2]]);
         sheet.getSheetByName('Results').getRange(results.length, 7).setValue(stages[stage].name);
-        sendResultToDiscord('Standings');
+        sendResultToDiscord('Standings', swiss.getSheetId());
         //make next round's match list if needed
         newSwissRound(stage);
       } else {
@@ -493,6 +518,7 @@ function updateSwiss(stage, add) {
   //remove current round if we are removing result and it wasn't there, then try again on previous round
   if (!found && !add) {
     swiss.deleteColumns(5, 5);
+    swiss.setColumnWidth(5, 100);
     if (options[2][1] % 2) {
       processing.getRange(frlength-1, 1, 2, 4).setValues([['','','',''],['','','','']]);
     }
@@ -598,9 +624,12 @@ function newSwissRound(stage) {
     
     swiss.insertColumns(6, 5);
     swiss.setColumnWidth(6, 150);
-    swiss.setColumnWidths(7, 2, 40);
+    swiss.setColumnWidths(7, 2, 20);
     swiss.setColumnWidth(9, 150);
     swiss.getRange('F1').setHorizontalAlignment('right');
+    swiss.getRange('G1').setHorizontalAlignment('left');
+    swiss.getRange('H1').setFontColor('#ffffff');
+    swiss.getRange('I:I').setHorizontalAlignment('right');
     swiss.getRange('J:J').setBackground('#707070');
     swiss.getRange(1, 6, roundMatches.length, 4).setValues(roundMatches);
     
@@ -613,6 +642,279 @@ function newSwissRound(stage) {
         processing.appendRow([assigned[byeIdx+1],'BYE', options[4][1], 0]);
         processing.appendRow(['BYE', assigned[byeIdx+1], 0, options[4][1]]);
       }
+    }
+  }
+}
+
+//Preset Random functions
+
+function randomOptions(stage) {
+  return [
+    ["''" + stages[stage].name + "' Preset Random Options", ""],
+    ["Seeding Sheet", ""],
+    ["Number of Players", ""],
+    ["Number of Rounds", ""],
+    ["Games per Match", ""]
+  ];
+}
+
+function createRandom(stage) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
+  
+  //setup matches
+  var standings = sheet.insertSheet(stages[stage].name + ' Standings');
+  standings.deleteRows(Number(options[2][1])+2,999-Number(options[2][1]));
+  standings.deleteColumns(8, 19);
+  standings.insertColumnsAfter(7, 2*options[3][1]+1)
+  standings.setColumnWidth(1, 20);
+  standings.setColumnWidth(2, 150);
+  standings.setColumnWidths(3, 4, 50);
+  standings.getRange('G:G').setBackground('#707070');
+  standings.setColumnWidth(8, 150);
+  for (let i=0; i<options[3][1]; i++) {
+    standings.setColumnWidth(9+2*i, 150);
+    standings.getRange(1, 9+2*i, options[2][1]+1).setBorder(false, true, false, false, null, false);
+    standings.getRange(2, 9+2*i, options[2][1]).setFontColor('#990000');
+    standings.setColumnWidth(10+2*i, 20);
+  }
+  standings.setFrozenColumns(7);
+  standings.setFrozenRows(1);
+  standings.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=ISBLANK(B1)').setFontColor('#FFFFFF').setRanges([standings.getRange('A:A')]).build()]);
+  var players = sheet.getSheetByName(options[1][1]).getRange('B2:B' + (Number(options[2][1]) + 1)).getValues().flat();
+  if (options[2][1] % 2) {players.push('OPEN');}
+  var pllength = players.length;
+  players.sort();
+  
+  var matches = [];
+  for (let i=0; i<pllength; i++) {
+    matches.push([players[i]]);
+  }
+  
+  function matchExists(p1,p2) {
+    for (let j=0; j<pllength; j++) {
+      if (matches[j][0] == p1) {
+        for (let k=0; k<options[3][1]; k++) {
+          if (matches[j][2*k+1] == p2) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+  
+  //assign matches
+  for (let rnd=0; rnd<options[3][1]; rnd++) {
+    let bad = false;
+    let potential = [];
+    do {
+      potential = [];
+      bad = false;
+      shuffle(players);
+      for (let i=0; i<options[2][1]/2; i++) {
+        if (rnd) {
+          bad = matchExists(players[2*i], players[2*i+1]);
+        }
+        if (!bad) {
+          potential.push([players[2*i], players[2*i+1]]);
+          potential.push([players[2*i+1], players[2*i]]);
+        } else {break;}
+      }
+    } while (bad);
+    for (let i=0; i<pllength; i++) {
+      for (let j=0; j<pllength; j++) {
+        if (potential[i][0] == matches[j][0]) {
+          matches[j].push(potential[i][1]);
+          matches[j].push('');
+        }
+      }
+    }
+  }
+  
+  //handle odd number of players
+  var byePlayer = null;
+  if (options[2][1] % 2) {
+    let opens = [];
+    for (let i=0; i<pllength; i++) {
+      if (matches[i][0] == 'OPEN') {
+        for (let rnd=0; rnd<options[3][1]; rnd++) {
+          opens.push(matches[i][rnd*2+1]);
+        }
+        matches.splice(i,1);
+        pllength--;
+        break;
+      }
+    }
+    if (opens.length % 2) {opens.splice(Math.floor(Math.random() * opens.length), 0, 'BYE');}
+    let assigned = [];
+    for (let i=0; i<opens.length; i++) {
+      if (!assigned.includes(opens[i])) {
+        let found = false;
+        for (let j=i+1; j<opens.length; j++) {
+          if (!matchExists(opens[i], opens[j])) {
+            assigned.push(opens[i]);
+            assigned.push(opens[j]);
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          for (let j=assigned.length-1; j>=0; j--) {
+            if (!matchExists(opens[i], assigned[j])) {
+              if (j%2) {
+                for (let k=i+1; k<opens.length; k++) {
+                  if (!matchExists(assigned[j-1], opens[k])) {
+                    assigned.push(assigned[j-1]);
+                    assigned.push(opens[k]);
+                    assigned[j-1] = opens[i];
+                    found = true;
+                    break;
+                  }
+                }
+              } else {
+                for (let k=i+1; k<opens.length; k++) {
+                  if (!matchExists(assigned[j+1], opens[k])) {
+                    assigned.push(assigned[j+1]);
+                    assigned.push(opens[k]);
+                    assigned[j-1] = opens[i];
+                    found = true;
+                    break;
+                  }
+                }
+              }
+            }
+            if (found) {break;}
+          }
+        }
+        if (!found) {
+          //this is an exceedingly rare case where someone cannot be found an unplayed opponent due to previous randomization
+          //for ease, just try again from scratch
+          sheet.deleteSheet(standings);
+          createRandom(stage);
+          return
+        }
+      }
+    }
+    for (let i=0; i<assigned.length; i++) {
+      if (assigned[i] == 'BYE') {
+        byePlayer = (i % 2) ? assigned[i-1] : assigned[i+1]
+      } else {
+        for (let j=0; j<pllength; j++) {
+          if (matches[j][0] == assigned[i]) {
+            for (let k=0; k<options[3][1]; k++) {
+              if (matches[j][2*k+1] == 'OPEN') {
+                let newval = (i % 2) ? assigned[i-1] : assigned[i+1]
+                matches[j][2*k+1] = newval;
+                if (newval == 'BYE') {
+                  matches[j][2*k+2] = options[4][1];
+                  standings.getRange(j+2, 9+2*k).setFontColor('#38761d');
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  //put matches on sheet
+  var topRow = ['Player'];
+  for (let i=0; i<options[3][1]; i++) {
+    topRow.push('Opponent ' + (i+1));
+    topRow.push('');
+  }
+  matches.splice(0,0,topRow);
+  standings.getRange(1, 8, matches.length, matches[0].length).setValues(matches).applyRowBanding();
+  
+  //results processing
+  var processing = sheet.insertSheet(stages[stage].name + ' Processing');
+  processing.deleteRows(101, 900);
+  processing.getRange('D1:D2').setValues([['-'],['-']]);
+  processing.getRange('E1').setFormula('=query(K:N,"select K,L/M,L,M-L,N where not K = \'BYE\' order by L/M desc, N desc, L desc")');
+  processing.getRange('K1').setFormula('=query(A:C,"select A, sum(B), sum(B)+sum(C) group by A order by A")');
+  var sosFormulas = [];
+  for (let i=0; i<pllength+Boolean(byePlayer); i++) {
+    let rowformulas = ["=IFERROR((O"+(i+3)+"+L"+(i+3)+"-M"+(i+3)+")/(P"+(i+3)+"-M"+(i+3)+"),\"NA\")", "=", "="];
+    for (let j=0; j<options[3][1]; j++) {
+      rowformulas[1] += "+".repeat(j!=0) + "IFERROR(VLOOKUP(VLOOKUP(K" + (i+3) + ",'" + stages[stage].name + " Standings'!H2:" + (options[2][1]+1) + "," + (2*j+2) + "),K:M,2,FALSE),0)";
+      rowformulas[2] += "+".repeat(j!=0) + "IFERROR(VLOOKUP(VLOOKUP(K" + (i+3) + ",'" + stages[stage].name + " Standings'!H2:" + (options[2][1]+1) + "," + (2*j+2) + "),K:M,3,FALSE),0)";
+    }
+    sosFormulas.push(rowformulas);
+  }
+  processing.getRange(3, 14, sosFormulas.length, 3).setValues(sosFormulas);
+  if (byePlayer) {
+    processing.appendRow([byePlayer, options[4][1], 0]);
+    processing.appendRow(['BYE', 0, options[4][1]]);
+  }
+  
+  //standings table copy from processing
+  var table = [['Pl', 'Player', 'Win Pct','Wins', 'Losses', 'SoS']];
+  for (let i=1; i <= options[2][1]; i++) {
+    table.push([i, "='"+stages[stage].name+" Processing'!E"+(i+1), "='"+stages[stage].name+" Processing'!F"+(i+1),
+      "='"+stages[stage].name+" Processing'!G"+(i+1), "='"+stages[stage].name+" Processing'!H"+(i+1), "='"+stages[stage].name+" Processing'!I"+(i+1)]);
+  }
+  standings.getRange(1,1,table.length,6).setValues(table);
+}
+
+function updateRandom(stage, add) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var results = sheet.getSheetByName('Results').getDataRange().getValues();
+  var mostRecent = results[results.length - 1];
+  var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
+  var standings = sheet.getSheetByName(stages[stage].name + ' Standings');
+  var matches = standings.getRange(2, 8, options[2][1], 2*options[3][1]+1).getValues();
+  var mlength = matches.length;
+  var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
+  var found = false;
+  
+  for (let i=0; i<mlength; i++) {
+    if (matches[i][0] == mostRecent[1]) {
+      for (let j=0; j < options[3][1]; j++) {
+        if (matches[i][2*j+1] == mostRecent[3]) {
+          var p1wins = add ? Number(matches[i][2*j+2]) + Number(mostRecent[2]) : Number(matches[i][2*j+2]) - Number(mostRecent[2]);
+          var cell1 = [i+2,9+2*j];
+          found = true;
+        }
+      }
+    } else if (matches[i][0] == mostRecent[3]) {
+      for (let j=0; j < options[3][1]; j++) {
+        if (matches[i][2*j+1] == mostRecent[1]) {
+          var p2wins = add ? Number(matches[i][2*j+2]) + Number(mostRecent[4]) : Number(matches[i][2*j+2]) - Number(mostRecent[4]);
+          var cell2 = [i+2,9+2*j];
+        }
+      }
+    }
+  }
+  if (found) {
+    standings.getRange(cell1[0], cell1[1]+1).setValue(p1wins);
+    standings.getRange(cell2[0], cell2[1]+1).setValue(p2wins);
+    if (p1wins + p2wins == options[4][1]) {
+      standings.getRange(cell1[0], cell1[1]).setFontColor('#38761d');
+      standings.getRange(cell2[0], cell2[1]).setFontColor('#38761d');
+    } else if ((p1wins + p2wins > options[4][1])) {
+      standings.getRange(cell1[0], cell1[1]).setFontColor('#ff0000');
+      standings.getRange(cell2[0], cell2[1]).setFontColor('#ff0000');
+    } else {
+      standings.getRange(cell1[0], cell1[1]).setFontColor('#990000');
+      standings.getRange(cell2[0], cell2[1]).setFontColor('#990000');    
+    }
+    if (add) {
+      processing.appendRow([mostRecent[1], mostRecent[2], mostRecent[4]]);
+      processing.appendRow([mostRecent[3], mostRecent[4], mostRecent[2]]);
+      sheet.getSheetByName('Results').getRange(results.length, 7).setValue(stages[stage].name);
+      sendResultToDiscord('Standings', standings.getSheetId());
+    } else {
+      //find the last processing row
+      let flatResults = processing.getRange('A:C').getValues();
+      let frlength = flatResults.length;
+      for (let i=2+options[2][1]+((options[2][1]*options[3][1]) % 2); i<frlength; i++) {
+        if (!flatResults[i][0]) {
+          frlength = i;
+        }
+      }
+      processing.getRange(frlength-1, 1, 2, 3).setValues([['','',''],['','','']]);
+      sheet.getSheetByName('Results').deleteRow(results.length);
     }
   }
 }
