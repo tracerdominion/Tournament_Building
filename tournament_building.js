@@ -357,10 +357,10 @@ function updateSingleBracket(stage, add) {
         let upperwins = add ? Number(mostRecent[4]) + Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) - Number(mostRecent[4]);
         bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).setValue(lowerwins);
         bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).setValue(upperwins);
-        if (lowerwins >= gamesToWin) {
+        if ((lowerwins >= gamesToWin) && (lowerwins > upperwins)) {
           bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[1]);
           bracket.getRange(i*(2**(j+1)) - offset, 2*j, 1, 2).setBackground('#D9EBD3');
-        } else if (upperwins >= gamesToWin) {
+        } else if ((upperwins >= gamesToWin) && (upperwins > lowerwins)) {
           bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[3]);
           bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if (!add) {
@@ -374,10 +374,10 @@ function updateSingleBracket(stage, add) {
         let upperwins = add ? Number(mostRecent[2]) + Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) -  Number(mostRecent[2]);
         bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).setValue(lowerwins);
         bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).setValue(upperwins);
-        if (lowerwins >= gamesToWin) {
+        if ((lowerwins >= gamesToWin) && (lowerwins > upperwins)) {
           bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[3]);
           bracket.getRange(i*(2**(j+1)) - offset, 2*j, 1, 2).setBackground('#D9EBD3');
-        } else if (upperwins >= gamesToWin) {
+        } else if ((upperwins >= gamesToWin) && (upperwins > lowerwins)) {
           bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[1]);
           bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if (!add) {
@@ -1151,7 +1151,6 @@ function updateGroups(stage, add) {
     let flatResults = processing.getRange('A:A').getValues();
     let frlength = flatResults.length;
     for (let i=groups.length+1; i<frlength; i++) {
-      Logger.log(flatResults[i][0]);
       if (!flatResults[i][0]) {
         frlength = i;
       }
