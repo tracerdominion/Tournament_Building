@@ -1,4 +1,4 @@
-// A name and type for each stage, ie [{name: 'Swiss', type: 'swiss}, {name: 'Elimination', type: 'single'}]
+// A name and type for each stage, ie [{name: 'Swiss', type: 'swiss'}, {name: 'Elimination', type: 'single'}]
 var stages = [];
 
 // The sheet that contains the player list in its second column
@@ -66,7 +66,7 @@ function testWebhook() {
   var admin = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Administration').getDataRange().getValues();
   var webhook = admin[3][1];
   
-  var possibles = ["[Hi! I'm your talking ticket. Do you have a result?](https://www.youtube.com/watch?v=9-QWW2Cxn98).",
+  var possibles = ["[Hi! I'm your talking webhook. Do you have a result?](https://www.youtube.com/watch?v=9-QWW2Cxn98).",
                    "[Ever wonder how your results are processed?](https://www.youtube.com/watch?v=OZT9IvH5mC8)."];
   
   var content = possibles[Math.floor(Math.random() * possibles.length)] + "\n\nThis webhook will display " + admin[0][1] + " results as they come in.";
