@@ -102,7 +102,7 @@ function adminSetup() {
   for (let i=1; i<playerSheet.length; i++) {
     names.push(playerSheet[i][1]);
   }
-  names.sort();
+  names.sort(lowerCaseOrder);
   var validation = FormApp.createTextValidation().requireNumberGreaterThanOrEqualTo(0).build();
   form.addListItem().setTitle('Your username').setChoiceValues(names);
   form.addTextItem().setTitle('Your wins').setValidation(validation);
@@ -248,6 +248,25 @@ function shuffle(arr, start=0, end=arr.length-1) {
   for(let i=end-start; i>0; i--) {
     let toend = Math.floor(Math.random()*(i+1) + start);
     [arr[i+start],arr[toend]] = [arr[toend], arr[i+start]];
+  }
+}
+
+function columnFinder(n) {
+  var letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  if (n <= 26) {
+    return letters[n-1];
+  } else {
+    return letters[Math.floor((n-1)/26)-1] + letters[((n-1)%26)];
+  }
+}
+
+function lowerCaseOrder(a,b) {
+  if (a.toLowerCase() < b.toLowerCase()) {
+    return -1;
+  } else if (a.toLowerCase() > b.toLowerCase()) {
+    return 1;
+  } else if (a.toLowerCase() == b.toLowerCase()) {
+    return 0
   }
 }
 
@@ -704,7 +723,7 @@ function createRandom(stage) {
   var players = sheet.getSheetByName(options[1][1]).getRange('B2:B' + (Number(options[2][1]) + 1)).getValues().flat();
   if (options[2][1] % 2) {players.push('OPEN');}
   var pllength = players.length;
-  players.sort();
+  players.sort(lowerCaseOrder);
   
   var matches = [];
   for (let i=0; i<pllength; i++) {
@@ -988,15 +1007,7 @@ function createGroups(stage) {
       groups.push(/^OPEN\d+$/.test(players[i]) ? [players[i], i%ngroups, -1, 2] : [players[i], i%ngroups, 0, 0]); 
     }
   }
-  groups.sort(function(a,b) {
-    if (a[0]<b[0]) {
-      return -1;
-    } else if (a[0]>b[0]) {
-      return 1;
-    } else {
-      return 0;
-    }
-  });
+  groups.sort((a,b) => lowerCaseOrder(a[0],b[0]));
   processing.getRange(1, 1, groups.length, 4).setValues(groups);
   processing.getRange('F1').setFormula('=query(A:D, "select A, avg(B), sum(C), sum(C)+sum(D) where not A=\'\' group by A")');
   processing.getRange('J2').setFormula('=arrayformula(iferror(H2:H' + (pllength + 1) + '/I2:I' + (pllength + 1) + ',0))');
