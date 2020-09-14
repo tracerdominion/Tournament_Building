@@ -1,8 +1,8 @@
 // A name and type for each stage, ie [{name: 'Swiss', type: 'swiss'}, {name: 'Elimination', type: 'single'}]
-var stages = [];
+var stages = [{name: 'Group', type: 'group'}, {name: 'Elimination', type: 'single'}];
 
 // The sheet that contains the player list in its second column
-var playerListSheet = '';
+var playerListSheet = 'Player List';
 
 function setupInitial() { 
   adminSetup();
@@ -66,8 +66,8 @@ function testWebhook() {
   var admin = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Administration').getDataRange().getValues();
   var webhook = admin[3][1];
   
-  var possibles = ["[Hi! I'm your talking webhook. Do you have a result?](https://www.youtube.com/watch?v=9-QWW2Cxn98).",
-                   "[Ever wonder how your results are processed?](https://www.youtube.com/watch?v=OZT9IvH5mC8)."];
+  var possibles = ["[Hi! I'm your talking webhook. Do you have a result?](https://www.youtube.com/watch?v=9-QWW2Cxn98)",
+                   "[Ever wonder how your results are processed?](https://www.youtube.com/watch?v=OZT9IvH5mC8)"];
   
   var content = possibles[Math.floor(Math.random() * possibles.length)] + "\n\nThis webhook will display " + admin[0][1] + " results as they come in.";
   
@@ -90,6 +90,44 @@ function testWebhook() {
    
   UrlFetchApp.fetch(webhook, testMessage);
 }
+
+function remakeStages() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = sheet.getSheets();
+  var nsheets = sheets.length;
+  var admin = sheet.getSheetByName('Administration').getDataRange().getValues();
+  
+  for (let i=0; i<stages.length; i++) {
+    if (!admin[i+6][2]) {
+      let stageNameRegex = new RegExp('^' + stages[i].name + ' ', 'g');
+      for (let j=0; j<nsheets; j++) {
+        Logger.log(sheets[j].getSheetName())
+        if (stageNameRegex.test(sheets[j].getSheetName())) {
+          sheet.deleteSheet(sheets[j]);
+        }
+      }
+      switch (stages[i].type.toLowerCase()) {
+        case 'single':
+        case 'single elimination':
+          createSingleBracket(i);
+          break;
+        case 'swiss':
+        case 'swiss system':
+          createSwiss(i);
+          break;
+        case 'random':
+        case 'preset random':
+          createRandom(i);
+          break;
+        case 'group':
+        case 'groups':
+          createGroups(i);
+          break;
+      }
+    }
+  }
+}
+
 
 function adminSetup() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
