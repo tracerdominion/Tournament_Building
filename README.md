@@ -44,7 +44,7 @@ To match existing names, called `create<Stage_type>`.
 
 This function should create and set up all sheets for this stage, without anything non-aesthetic needed to be added by the user. Be sure to consider how results will be processed.
 
-Once completed, it should be appropriately added to the switch statement in the `setupSheets()` function.
+Once completed, it should be appropriately added to the switch statements in both the `setupSheets()` and the `remakeStages()` functions.
 
 #### Update (with new results) functions
 

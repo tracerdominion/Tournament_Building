@@ -94,16 +94,15 @@ function testWebhook() {
 function remakeStages() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var sheets = sheet.getSheets();
-  var nsheets = sheets.length;
   var admin = sheet.getSheetByName('Administration').getDataRange().getValues();
   
   for (let i=0; i<stages.length; i++) {
     if (!admin[i+6][2]) {
-      let stageNameRegex = new RegExp('^' + stages[i].name + ' ', 'g');
-      for (let j=0; j<nsheets; j++) {
-        Logger.log(sheets[j].getSheetName())
-        if (stageNameRegex.test(sheets[j].getSheetName())) {
+      let stageNameRegex = new RegExp('^' + stages[i].name + ' ');
+      for (let j=sheets.length-1; j>=0; j--) {
+        if(stageNameRegex.test(sheets[j].getSheetName())) {
           sheet.deleteSheet(sheets[j]);
+          sheets.splice(j,1);
         }
       }
       switch (stages[i].type.toLowerCase()) {
@@ -1085,7 +1084,7 @@ function createGroups(stage) {
   
   //make aggregates
   switch (options[5][1].toLowerCase()) {
-    case 'win only':
+    case 'wins only':
       processing.getRange('T1').setFormula('=query(L:R, "select L,R,M,Q where not L=\'\' order by Q desc")');
       var aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation');
       var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Win Percentage']];
@@ -1098,26 +1097,25 @@ function createGroups(stage) {
       aggregate.getRange(1, 1, aggTable.length, 5).setValues(aggTable);
       break;
     case 'separate':
-      processing.insertColumnsAfter(20, 4*options[3][1]);
+      processing.getRange('T1').setFormula('=query(L:R, "select L,R,M,Q where not L=\'\' order by R, Q desc")');
       for (let i=0; i<options[3][1]; i++) {
-        processing.getRange(1, 20+4*i).setFormula('=query(L:R, "select L,R,M,Q where R='+(i+1)+' and not L=\'\' order by Q desc")');
         let aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation ' + (i+1) + ((i==0) ? 'sts' : (i==1) ? 'nds' : (i==2) ? 'rds' : 'ths'));
         let aggTable = [['Seed', 'Player', 'Place', 'Group', 'Win Percentage']];
         for (let j=0; j<ngroups; j++) {
           if (i == options[3][1]-1) {
-            let openCheckString = "=IF(regexmatch('" + stages[stage].name + " Processing'!" + columnFinder(20+4*i) + (j+2) + ",\"^OPEN\\d+$\"),,";
-            aggTable.push(["=IF(regexmatch('" + stages[stage].name + " Processing'!" + columnFinder(20+4*i) + (j+2) + ",\"^OPEN\\d+$\"),," + (j+1) + ")",
-              openCheckString + "'" + stages[stage].name + " Processing'!" + columnFinder(20+4*i) + (j+2) + ")",
-              openCheckString + "'" + stages[stage].name + " Processing'!" + columnFinder(21+4*i) + (j+2) + ")",
-              openCheckString + "index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!" + columnFinder(22+4*i) + (j+2) + "))",
-              openCheckString + "'" + stages[stage].name + " Processing'!" + columnFinder(23+4*i) + (j+2) + ")"
+            let openCheckString = "=IF(regexmatch('" + stages[stage].name + " Processing'!" + (i*ngroups+j+2) + ",\"^OPEN\\d+$\"),,";
+            aggTable.push([openCheckString + (j+1) + ")",
+              openCheckString + "'" + stages[stage].name + " Processing'!T" + (i*ngroups+j+2) + ")",
+              openCheckString + "'" + stages[stage].name + " Processing'!U" + (i*ngroups+j+2) + ")",
+              openCheckString + "index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (i*ngroups+j+2) + "))",
+              openCheckString + "'" + stages[stage].name + " Processing'!W" + (i*ngroups+j+2) + ")"
             ]);
           } else {
             aggTable.push([j+1,
-              "='" + stages[stage].name + " Processing'!" + columnFinder(20+4*i) + (j+2),
-              "='" + stages[stage].name + " Processing'!" + columnFinder(21+4*i) + (j+2),
-              "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!" + columnFinder(22+4*i) + (j+2) + ")",
-              "='" + stages[stage].name + " Processing'!" + columnFinder(23+4*i) + (j+2)
+              "='" + stages[stage].name + " Processing'!T" + (i*ngroups+j+2),
+              "='" + stages[stage].name + " Processing'!U" + (i*ngroups+j+2),
+              "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (i*ngroups+j+2) + ")",
+              "='" + stages[stage].name + " Processing'!W" + (i*ngroups+j+2)
             ]);
           } 
         }
@@ -1125,9 +1123,7 @@ function createGroups(stage) {
       }
       break;
     case 'fixed':
-      processing.insertColumnsAfter(20, 4);
-      processing.getRange(1, 20).setFormula('=query(L:R, "select L,R,M,Q where R=1 and not L=\'\' order by Q desc")');
-      processing.getRange(1, 24).setFormula('=query(L:R, "select L,R,M,Q where R=2 and not L=\'\' order by Q desc")');
+      processing.getRange('T1').setFormula('=query(L:R, "select L,R,M,Q where not L=\'\' order by R, M")');
       var aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation');
       var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Win Percentage']];
       for (let i=0; i<ngroups; i++) {
@@ -1137,13 +1133,13 @@ function createGroups(stage) {
         ]);
       }
       for(let i=ngroups; i>0; i-=2) {
-        aggTable.push([2*ngroups+1-i, "='" + stages[stage].name + " Processing'!X" + i, "='" + stages[stage].name + " Processing'!Y" + i,
-          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!Z" + i + ")",
-          "='" + stages[stage].name + " Processing'!AA" + i
+        aggTable.push([2*ngroups+1-i, "='" + stages[stage].name + " Processing'!T" + (ngroups+i), "='" + stages[stage].name + " Processing'!U" + (ngroups+i),
+          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (ngroups+i) + ")",
+          "='" + stages[stage].name + " Processing'!W" + (ngroups+i)
         ]);
-        aggTable.push([2*ngroups+2-i, "='" + stages[stage].name + " Processing'!X" + (i+1), "='" + stages[stage].name + " Processing'!Y" + (i+1),
-          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!Z" + (i+1) + ")",
-          "='" + stages[stage].name + " Processing'!AA" + (i+1)
+        aggTable.push([2*ngroups+2-i, "='" + stages[stage].name + " Processing'!T" + (ngroups+i+1), "='" + stages[stage].name + " Processing'!U" + (ngroups+i+1),
+          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (ngroups+i+1) + ")",
+          "='" + stages[stage].name + " Processing'!W" + (ngroups+i+1)
         ]);
       }
       aggregate.getRange(1, 1, aggTable.length, 5).setValues(aggTable);
@@ -1151,20 +1147,15 @@ function createGroups(stage) {
     case 'none':
       break;
     default:
-      processing.insertColumnsAfter(20, 4*options[3][1]);
-      for (let i=0; i<options[3][1]; i++) {
-        processing.getRange(1, 20+4*i).setFormula('=query(L:R, "select L,R,M,Q where R='+(i+1)+' and not L=\'\' order by Q desc")');
-      }
+      processing.getRange('T1').setFormula('=query(L:R, "select L,R,M,Q where not L=\'\' order by R, Q desc")');
       var aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation');
       var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Win Percentage']];
       for (let i=0; i<options[2][1]; i++) {
-        let colOffset = 4*Math.floor(i/ngroups);
-        let rowNum = (i%ngroups)+2
         aggTable.push([i+1,
-          "='" + stages[stage].name + " Processing'!" + columnFinder(20+colOffset) + rowNum,
-          "='" + stages[stage].name + " Processing'!" + columnFinder(21+colOffset) + rowNum,
-          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!" + columnFinder(22+colOffset) + rowNum + ")",
-          "='" + stages[stage].name + " Processing'!" + columnFinder(23+colOffset) + rowNum
+          "='" + stages[stage].name + " Processing'!T" + (i+2),
+          "='" + stages[stage].name + " Processing'!U" + (i+2),
+          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (i+2) + ")",
+          "='" + stages[stage].name + " Processing'!W" + (i+2)
         ]);
       }
       aggregate.getRange(1, 1, aggTable.length, 5).setValues(aggTable);
