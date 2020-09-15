@@ -1,8 +1,8 @@
 // A name and type for each stage, ie [{name: 'Swiss', type: 'swiss'}, {name: 'Elimination', type: 'single'}]
-var stages = [{name: 'Group', type: 'group'}, {name: 'Elimination', type: 'single'}];
+var stages = [];
 
 // The sheet that contains the player list in its second column
-var playerListSheet = 'Player List';
+var playerListSheet = '';
 
 function setupInitial() { 
   adminSetup();
@@ -354,7 +354,6 @@ function createSingleBracket(stage) {
   switch (seedMethod) {
     case 'random':
       shuffle(seedList);
-      Logger.log(seedList);
       break;
     case 'tennis':
       let lastWithBye = 2**nround - options[2][1];
