@@ -98,28 +98,35 @@ function remakeStages() {
   
   for (let i=0; i<stages.length; i++) {
     if (!admin[i+6][2]) {
-      let stageNameRegex = new RegExp('^' + stages[i].name + ' ');
-      for (let j=sheets.length-1; j>=0; j--) {
-        if(stageNameRegex.test(sheets[j].getSheetName())) {
-          sheet.deleteSheet(sheets[j]);
-          sheets.splice(j,1);
-        }
-      }
       switch (stages[i].type.toLowerCase()) {
         case 'single':
         case 'single elimination':
+          sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Bracket'));
           createSingleBracket(i);
           break;
         case 'swiss':
         case 'swiss system':
+          sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Standings'));
+          sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Processing'));
           createSwiss(i);
           break;
         case 'random':
         case 'preset random':
+          sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Standings'));
+          sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Processing'));
           createRandom(i);
           break;
         case 'group':
         case 'groups':
+          sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Standings'));
+          sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Processing'));
+          let aggRegex = new RegExp('^' + stages[i].name + ' Aggregation');
+          for (let j=sheets.length-1; j>=0; j--) {
+            if(aggRegex.test(sheets[j].getSheetName())) {
+              sheet.deleteSheet(sheets[j]);
+              sheets.splice(j,1);
+            }
+          }
           createGroups(i);
           break;
       }
@@ -139,7 +146,15 @@ function adminSetup() {
   for (let i=1; i<playerSheet.length; i++) {
     names.push(playerSheet[i][1]);
   }
-  names.sort(lowerCaseOrder);
+  names.sort(function(a,b) {
+    if (a.toLowerCase() < b.toLowerCase()) {
+      return -1;
+    } else if (a.toLowerCase() > b.toLowerCase()) {
+      return 1;
+    } else if (a.toLowerCase() == b.toLowerCase()) {
+      return 0
+    }  
+  });
   var validation = FormApp.createTextValidation().requireNumberGreaterThanOrEqualTo(0).build();
   form.addListItem().setTitle('Your username').setChoiceValues(names);
   form.addTextItem().setTitle('Your wins').setValidation(validation);
@@ -297,15 +312,6 @@ function columnFinder(n) {
   }
 }
 
-function lowerCaseOrder(a,b) {
-  if (a.toLowerCase() < b.toLowerCase()) {
-    return -1;
-  } else if (a.toLowerCase() > b.toLowerCase()) {
-    return 1;
-  } else if (a.toLowerCase() == b.toLowerCase()) {
-    return 0
-  }
-}
 
 //Single Elimination functions
 
@@ -490,7 +496,10 @@ function createSwiss(stage) {
   processing.deleteRows(101, 900);
   processing.getRange('E1').setValue('-');
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
-  var players = sheet.getSheetByName(options[1][1]).getRange('B2:B' + (Number(options[2][1]) + 1)).getValues().flat();
+  var players = [];
+  for (let i=0; i<options[2][1]; i++) {
+    players.push("='" + options[1][1] + "'!B" + (i+2))
+  }
   
   //display sheet
   //standings
@@ -756,10 +765,12 @@ function createRandom(stage) {
   standings.setFrozenColumns(7);
   standings.setFrozenRows(1);
   standings.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=ISBLANK(B1)').setFontColor('#FFFFFF').setRanges([standings.getRange('A:A')]).build()]);
-  var players = sheet.getSheetByName(options[1][1]).getRange('B2:B' + (Number(options[2][1]) + 1)).getValues().flat();
+  var players = [];
+  for (let i=0; i<options[2][1]; i++) {
+    players.push("='" + options[1][1] + "'!B" + (i+2))
+  }
   if (options[2][1] % 2) {players.push('OPEN');}
   var pllength = players.length;
-  players.sort(lowerCaseOrder);
   
   var matches = [];
   for (let i=0; i<pllength; i++) {
@@ -1016,7 +1027,10 @@ function createGroups(stage) {
   standings.setColumnWidth(1, 150);
   standings.setColumnWidths(2, 4, 50);
   var processing = sheet.insertSheet(stages[stage].name + ' Processing');
-  var players = sheet.getSheetByName(options[1][1]).getRange('B2:B' + (Number(options[2][1]) + 1)).getValues().flat();
+  var players = [];
+  for (let i=0; i<options[2][1]; i++) {
+    players.push("='" + options[1][1] + "'!B" + (i+2))
+  }
   var ngroups = Math.ceil(options[2][1]/options[3][1]);
   
   //establish groups
@@ -1043,7 +1057,6 @@ function createGroups(stage) {
       groups.push(/^OPEN\d+$/.test(players[i]) ? [players[i], i%ngroups, -1, 2] : [players[i], i%ngroups, 0, 0]); 
     }
   }
-  groups.sort((a,b) => lowerCaseOrder(a[0],b[0]));
   processing.getRange(1, 1, groups.length, 4).setValues(groups);
   processing.getRange('F1').setFormula('=query(A:D, "select A, avg(B), sum(C), sum(C)+sum(D) where not A=\'\' group by A")');
   processing.getRange('J2').setFormula('=arrayformula(iferror(H2:H' + (pllength + 1) + '/I2:I' + (pllength + 1) + ',0))');

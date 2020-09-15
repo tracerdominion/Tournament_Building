@@ -89,5 +89,3 @@ Right now there are two helper functions in the script that may be useful in sta
 `shuffle(array, start, end)` - randomly permutes the elements indexed between start and end, inclusive, of the array in place. This can be useful for seeding randomization.
 
 `columnFinder(n)` - returns the letter code for the nth spreadsheet column (1 => 'A', 2 => 'B', ... 26 => 'Z', 27 => 'AA', ...) up to 702. This can be useful when adding spreadsheet formulas to your sheets. Please don't exceed 702 columns, whether you are using this function or not.
-
-`lowerCaseOrder(a,b)` - compare function for strings which takes them to lower case for comparison. This is useful for usernames since they vary in capitalization.
