@@ -998,7 +998,7 @@ function updateRandom(stage, add) {
 
 function groupsOptions(stage) {
   return [
-    ["''" + stages[stage].name + "' Preset Random Options", ""],
+    ["''" + stages[stage].name + "' Groups Options", ""],
     ["Seeding Sheet", ""],
     ["Number of Players", ""],
     ["Players per Group", ""],
