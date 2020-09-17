@@ -44,6 +44,8 @@ To match existing names, called `create<Stage_type>`.
 
 This function should create and set up all sheets for this stage, without anything non-aesthetic needed to be added by the user. Be sure to consider how results will be processed.
 
+Be sure to import players by index (not value or cell reference) from the seeding sheet - this is essential for automatic linking once results fill in.
+
 Once completed, it should be appropriately added to the switch statements in both the `setupSheets()` and the `remakeStages()` functions.
 
 #### Update (with new results) functions
