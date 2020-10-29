@@ -53,6 +53,7 @@ Once completed, it should be appropriately added to the switch statements in bot
 Should take a parameter `stage` which is the index of the stage in the stages array at the very top of the script.
 May take an additional parameter which tells it whether the update is an addition or removal. Since removals often require the same searches as additions, it can be useful to handle both in the same function.
 To match existing names, called `update<Stage_type>`.
+Should return true if an update took place, and flase otherwise.
 
 This should take the most recent result and place it where it needs to go to update the stage to include it. It should be able to handle partial matches.
 
@@ -72,6 +73,7 @@ var mostRecent = results[results.length - 1];
 In addition to doing whatever is needed to add these results, if successfully added it should also:
 * Append the stage name to the most recent result. This can be done with `sheet.getSheetByName('Results').getRange(results.length, 7).setValue(stages[stage].name)` assuming `sheet` is defined as above.
 * Make a call to the function `sendResultToDiscord(displayType, gid)` to show the results embed. `displayType` should be a string that describes the output of the stage, for example `'Standings'` or `'Bracket'`. `gid` should be the id of that output sheet, accessed through `getSheetId()`([ref](https://developers.google.com/apps-script/reference/spreadsheet/sheet#getSheetId())).
+* Return true
 
 Once completed, it should be appropriately added to the switch statement in the `onFormSubmit()` function.
 

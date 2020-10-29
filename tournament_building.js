@@ -230,28 +230,33 @@ function addStages() {
 
 function onFormSubmit() {
   var admin = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Administration').getDataRange().getValues();
+  var found = false;
   
   for (let i=0; i < stages.length; i++) {
     if ((admin[i+6][2]) && (!admin[i+6][3])) {
       switch (stages[i].type.toLowerCase()) {
         case 'single':
         case 'single elimination':
-          updateSingleBracket(i, true);
+          found = updateSingleBracket(i, true);
           break;
         case 'swiss':
         case 'swiss system':
-          updateSwiss(i, true);
+          found = updateSwiss(i, true);
           break;
         case 'random':
         case 'preset random':
-          updateRandom(i, true);
+          found = updateRandom(i, true);
           break;
         case 'group':
         case 'groups':
-          updateGroups(i, true);
+          found = updateGroups(i, true);
           break;
       }
     }
+  }
+  
+  if (!found) {
+    sendResultToDiscord('unfound', 0);
   }
 }
 
@@ -263,37 +268,56 @@ function sendResultToDiscord(displayType, gid) {
   var mostRecent = results[results.length - 1];
   
   var display = '**' + mostRecent[1] + ' ' + mostRecent[2] + '-' + mostRecent[4] + ' ' + mostRecent[3] + '**';
-  if (mostRecent[5]) {
-    display += '\n' + mostRecent[5];
-  }
-  display += '\n**[Current ' + displayType + '](' + admin[1][1] + '?gid=' + gid + ')**';
-  
-  var scoreEmbed = {
-    "method": "post",
-    "headers": {
-      "Content-Type": "application/json",
-    },
-    "payload": JSON.stringify({
-      "content": null,
-      "embeds": [{
-        "title": "New " + admin[0][1] + " Result",
-        "color": parseInt('0x'.concat(admin[3][3].slice(1))),
-        "description": display
-      }]
-    })
-  };
-  var matchCommand = {
-    "method": "post",
-    "headers": {
-      "Content-Type": "application/json",
-    },
-    "payload": JSON.stringify({
-      "content": "!match " + mostRecent[1] + ", " + mostRecent[3] + " -c"
-    })
-  };
-  
-  UrlFetchApp.fetch(webhook, scoreEmbed);
-  UrlFetchApp.fetch(webhook, matchCommand);
+  if (displayType == 'unfound') {
+    display += '\nThis results submission did not match any active matches. If it should have, the tournament organizer should make sure that active stages are properly checked as having started and that there are no spreadsheet errors.';   
+    var unfoundEmbed = {
+      "method": "post",
+      "headers": {
+        "Content-Type": "application/json",
+      },
+      "payload": JSON.stringify({
+        "content": null,
+        "embeds": [{
+          "title": "Invalid Result Submitted",
+          "color": parseInt('0x'.concat(admin[3][3].slice(1))),
+          "description": display
+        }]
+      })
+    };
+    UrlFetchApp.fetch(webhook, unfoundEmbed);
+  } else {
+    if (mostRecent[5]) {
+      display += '\n' + mostRecent[5];
+    }
+    display += '\n**[Current ' + displayType + '](' + admin[1][1] + '?gid=' + gid + ')**';
+    
+    var scoreEmbed = {
+      "method": "post",
+      "headers": {
+        "Content-Type": "application/json",
+      },
+      "payload": JSON.stringify({
+        "content": null,
+        "embeds": [{
+          "title": "New " + admin[0][1] + " Result",
+          "color": parseInt('0x'.concat(admin[3][3].slice(1))),
+          "description": display
+        }]
+      })
+    };
+    var matchCommand = {
+      "method": "post",
+      "headers": {
+        "Content-Type": "application/json",
+      },
+      "payload": JSON.stringify({
+        "content": "!match " + mostRecent[1] + ", " + mostRecent[3] + " -c"
+      })
+    };
+    
+    UrlFetchApp.fetch(webhook, scoreEmbed);
+    UrlFetchApp.fetch(webhook, matchCommand);
+  }  
 }
 
 function shuffle(arr, start=0, end=arr.length-1) {
@@ -311,6 +335,7 @@ function columnFinder(n) {
     return letters[Math.floor((n-1)/26)-1] + letters[((n-1)%26)];
   }
 }
+
 
 
 //Single Elimination functions
@@ -459,7 +484,10 @@ function updateSingleBracket(stage, add) {
       break;
     }
   }
+  
+  return found;
 }
+
 
 //Swiss system functions
 
@@ -608,6 +636,8 @@ function updateSwiss(stage, add) {
     }
     updateSwiss(stage, false);
   }
+  
+  return found;
 }
 
 function newSwissRound(stage) {
@@ -729,6 +759,7 @@ function newSwissRound(stage) {
     }
   }
 }
+
 
 //Preset Random functions
 
@@ -1003,7 +1034,10 @@ function updateRandom(stage, add) {
       sheet.getSheetByName('Results').deleteRow(results.length);
     }
   }
+  
+  return found;
 }
+
 
 //Groups functions
 
@@ -1182,7 +1216,7 @@ function updateGroups(stage, add) {
   var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
   var groups = processing.getRange(1, 1, options[3][1]*Math.ceil(options[2][1]/options[3][1]), 2).getValues();
   
-  if (mostRecent[1] == mostRecent[3]) {return;}
+  if (mostRecent[1] == mostRecent[3]) {return false;}
   
   if (add) {
     for (let i=0; i<options[2][1]; i++) {
@@ -1197,6 +1231,9 @@ function updateGroups(stage, add) {
       processing.appendRow([mostRecent[1], p1Group, mostRecent[2], mostRecent[4]]);
       processing.appendRow([mostRecent[3], p1Group, mostRecent[4], mostRecent[2]]);
       sendResultToDiscord('Standings',sheet.getSheetByName(stages[stage].name + ' Standings').getSheetId());
+      return true;
+    } else {
+      return false;
     }
   } else {
     sheet.getSheetByName('Results').deleteRow(results.length);
@@ -1208,5 +1245,6 @@ function updateGroups(stage, add) {
       }
     }
     processing.getRange(frlength-1, 1, 2, 4).setValues([['','','',''],['','','','']]);
+    return true;
   }
 }
