@@ -93,7 +93,6 @@ function testWebhook() {
 
 function remakeStages() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
-  var sheets = sheet.getSheets();
   var admin = sheet.getSheetByName('Administration').getDataRange().getValues();
   
   for (let i=0; i<stages.length; i++) {
@@ -120,6 +119,7 @@ function remakeStages() {
         case 'groups':
           sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Standings'));
           sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Processing'));
+          var sheets = sheet.getSheets();
           let aggRegex = new RegExp('^' + stages[i].name + ' Aggregation');
           for (let j=sheets.length-1; j>=0; j--) {
             if(aggRegex.test(sheets[j].getSheetName())) {
@@ -264,10 +264,10 @@ function sendResultToDiscord(displayType, gid) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var admin = sheet.getSheetByName('Administration').getDataRange().getValues();
   var webhook = admin[3][1];
-  var results = sheet.getSheetByName('Results').getDataRange().getValues();
-  var mostRecent = results[results.length - 1];
+  var form = FormApp.openByUrl(admin[2][1]).getResponses();
+  var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse()});
   
-  var display = '**' + mostRecent[1] + ' ' + mostRecent[2] + '-' + mostRecent[4] + ' ' + mostRecent[3] + '**';
+  var display = '**' + mostRecent[0] + ' ' + mostRecent[1] + '-' + mostRecent[3] + ' ' + mostRecent[2] + '**';
   if (displayType == 'unfound') {
     display += '\nThis results submission did not match any active matches. If it should have, the tournament organizer should make sure that active stages are properly checked as having started and that there are no spreadsheet errors.';   
     var unfoundEmbed = {
@@ -286,8 +286,8 @@ function sendResultToDiscord(displayType, gid) {
     };
     UrlFetchApp.fetch(webhook, unfoundEmbed);
   } else {
-    if (mostRecent[5]) {
-      display += '\n' + mostRecent[5];
+    if (mostRecent[4]) {
+      display += '\n' + mostRecent[4];
     }
     display += '\n**[Current ' + displayType + '](' + admin[1][1] + '?gid=' + gid + ')**';
     
@@ -311,7 +311,7 @@ function sendResultToDiscord(displayType, gid) {
         "Content-Type": "application/json",
       },
       "payload": JSON.stringify({
-        "content": "!match " + mostRecent[1] + ", " + mostRecent[3] + " -c"
+        "content": "!match " + mostRecent[0] + ", " + mostRecent[2] + " -c"
       })
     };
     
@@ -335,6 +335,7 @@ function columnFinder(n) {
     return letters[Math.floor((n-1)/26)-1] + letters[((n-1)%26)];
   }
 }
+
 
 
 
@@ -424,8 +425,8 @@ function createSingleBracket(stage) {
 
 function updateSingleBracket(stage, add) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
-  var results = sheet.getSheetByName('Results').getDataRange().getValues();
-  var mostRecent = results[results.length - 1];
+  var form = FormApp.openByUrl(sheet.getSheetByName('Administration').getDataRange().getValues()[2][1]).getResponses();
+  var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse()});
   var bracket = sheet.getSheetByName(stages[stage].name + ' Bracket');
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
   var nround = Math.ceil(Math.log(options[2][1])/Math.log(2));
@@ -438,16 +439,16 @@ function updateSingleBracket(stage, add) {
     for (let i=1; i<=nplayer; i++) {
       let lower = bracket.getRange(i*(2**(j+1)) - offset, 2*j).getValue();
       let upper = bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j).getValue();
-      if ((lower == mostRecent[1]) && (upper == mostRecent[3])) {
-        let lowerwins = add ? Number(mostRecent[2]) + Number(bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).getValue()) - Number(mostRecent[2]);
-        let upperwins = add ? Number(mostRecent[4]) + Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) - Number(mostRecent[4]);
+      if ((lower == mostRecent[0]) && (upper == mostRecent[2])) {
+        let lowerwins = add ? Number(mostRecent[1]) + Number(bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).getValue()) - Number(mostRecent[1]);
+        let upperwins = add ? Number(mostRecent[3]) + Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) - Number(mostRecent[3]);
         bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).setValue(lowerwins);
         bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).setValue(upperwins);
         if ((lowerwins >= gamesToWin) && (lowerwins > upperwins)) {
-          bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[1]);
+          bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[0]);
           bracket.getRange(i*(2**(j+1)) - offset, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if ((upperwins >= gamesToWin) && (upperwins > lowerwins)) {
-          bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[3]);
+          bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[2]);
           bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if (!add) {
           bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue('');
@@ -455,16 +456,16 @@ function updateSingleBracket(stage, add) {
         }
         found = true;
         break;
-      } else if ((lower == mostRecent[3]) && (upper == mostRecent[1])) {
-        let lowerwins = add ? Number(mostRecent[4]) + Number(bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).getValue()) - Number(mostRecent[4]);
-        let upperwins = add ? Number(mostRecent[2]) + Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) -  Number(mostRecent[2]);
+      } else if ((lower == mostRecent[2]) && (upper == mostRecent[0])) {
+        let lowerwins = add ? Number(mostRecent[3]) + Number(bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).getValue()) - Number(mostRecent[3]);
+        let upperwins = add ? Number(mostRecent[1]) + Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) : Number(bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).getValue()) -  Number(mostRecent[1]);
         bracket.getRange(i*(2**(j+1)) - offset, 2*j+1).setValue(lowerwins);
         bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j+1).setValue(upperwins);
         if ((lowerwins >= gamesToWin) && (lowerwins > upperwins)) {
-          bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[3]);
+          bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[2]);
           bracket.getRange(i*(2**(j+1)) - offset, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if ((upperwins >= gamesToWin) && (upperwins > lowerwins)) {
-          bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[1]);
+          bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue(mostRecent[0]);
           bracket.getRange(i*(2**(j+1)) - offset - 2**j, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if (!add) {
           bracket.getRange(i*(2**(j+1)) - offset - 2**(j-1), 2*j+2).setValue('');
@@ -475,11 +476,12 @@ function updateSingleBracket(stage, add) {
       }
     }
     if (found) {
+      var results = sheet.getSheetByName('Results');
       if (add) {
-        sheet.getSheetByName('Results').getRange(results.length, 7).setValue(stages[stage].name);
+        results.getRange(results.getDataRange().getNumRows(), 7).setValue(stages[stage].name);
         sendResultToDiscord('Bracket', bracket.getSheetId());
       } else {
-        sheet.getSheetByName('Results').deleteRow(results.length);
+        results.getRange(results.getDataRange().getNumRows(), 7).setValue('');
       }
       break;
     }
@@ -580,8 +582,8 @@ function createSwiss(stage) {
 
 function updateSwiss(stage, add) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
-  var results = sheet.getSheetByName('Results').getDataRange().getValues();
-  var mostRecent = results[results.length - 1];
+  var form = FormApp.openByUrl(sheet.getSheetByName('Administration').getDataRange().getValues()[2][1]).getResponses();
+  var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse()});
   var swiss = sheet.getSheetByName(stages[stage].name + ' Standings');
   var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
@@ -601,26 +603,27 @@ function updateSwiss(stage, add) {
   var roundMatches = swiss.getRange(2, 6, Math.ceil(options[2][1]/2),4).getValues();
   var found = false;
   for (let i=0; i < roundMatches.length; i++) {
-    if ((roundMatches[i][0] == mostRecent[1]) && (roundMatches[i][3] == mostRecent[3])) {
-      var leftwins = add ? Number(roundMatches[i][1]) + Number(mostRecent[2]) : Number(roundMatches[i][1]) - Number(mostRecent[2]);
-      var rightwins = add ? Number(roundMatches[i][2]) + Number(mostRecent[4]) : Number(roundMatches[i][2]) - Number(mostRecent[4]);
+    if ((roundMatches[i][0] == mostRecent[0]) && (roundMatches[i][3] == mostRecent[2])) {
+      var leftwins = add ? Number(roundMatches[i][1]) + Number(mostRecent[1]) : Number(roundMatches[i][1]) - Number(mostRecent[1]);
+      var rightwins = add ? Number(roundMatches[i][2]) + Number(mostRecent[3]) : Number(roundMatches[i][2]) - Number(mostRecent[3]);
       found = true;
-    } else if ((roundMatches[i][0] == mostRecent[3]) && (roundMatches[i][3] == mostRecent[1])) {
-      var leftwins = add ? Number(roundMatches[i][1]) + Number(mostRecent[4]) : Number(roundMatches[i][1]) - Number(mostRecent[4]);
-      var rightwins = add ? Number(roundMatches[i][2]) + Number(mostRecent[2]) : Number(roundMatches[i][2]) - Number(mostRecent[2]);
+    } else if ((roundMatches[i][0] == mostRecent[2]) && (roundMatches[i][3] == mostRecent[0])) {
+      var leftwins = add ? Number(roundMatches[i][1]) + Number(mostRecent[3]) : Number(roundMatches[i][1]) - Number(mostRecent[3]);
+      var rightwins = add ? Number(roundMatches[i][2]) + Number(mostRecent[1]) : Number(roundMatches[i][2]) - Number(mostRecent[1]);
       found = true;
     }    
     if (found) {
+      var results = sheet.getSheetByName('Results');
       swiss.getRange(i+2, 7, 1, 2).setValues([[leftwins, rightwins]]);
       if (add) { 
-        processing.appendRow([mostRecent[1], mostRecent[3], mostRecent[2], mostRecent[4]]);
-        processing.appendRow([mostRecent[3], mostRecent[1], mostRecent[4], mostRecent[2]]);
-        sheet.getSheetByName('Results').getRange(results.length, 7).setValue(stages[stage].name);
+        processing.appendRow([mostRecent[0], mostRecent[2], mostRecent[1], mostRecent[3]]);
+        processing.appendRow([mostRecent[2], mostRecent[0], mostRecent[3], mostRecent[1]]);
+        results.getRange(results.getDataRange().getNumRows(), 7).setValue(stages[stage].name);
         sendResultToDiscord('Standings', swiss.getSheetId());
         //make next round's match list if needed
         newSwissRound(stage);
       } else {
-        sheet.getSheetByName('Results').deleteRow(results.length);
+        results.getRange(results.getDataRange().getNumRows(), 7).setValue('');
         processing.getRange(frlength-1, 1, 2, 4).setValues([['','','',''],['','','','']]);
       }
       break;
@@ -976,8 +979,8 @@ function createRandom(stage) {
 
 function updateRandom(stage, add) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
-  var results = sheet.getSheetByName('Results').getDataRange().getValues();
-  var mostRecent = results[results.length - 1];
+  var form = FormApp.openByUrl(sheet.getSheetByName('Administration').getDataRange().getValues()[2][1]).getResponses();
+  var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse()});
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
   var standings = sheet.getSheetByName(stages[stage].name + ' Standings');
   var matches = standings.getRange(2, 8, options[2][1], 2*options[3][1]+1).getValues();
@@ -986,24 +989,25 @@ function updateRandom(stage, add) {
   var found = false;
   
   for (let i=0; i<mlength; i++) {
-    if (matches[i][0] == mostRecent[1]) {
+    if (matches[i][0] == mostRecent[0]) {
       for (let j=0; j < options[3][1]; j++) {
-        if (matches[i][2*j+1] == mostRecent[3]) {
-          var p1wins = add ? Number(matches[i][2*j+2]) + Number(mostRecent[2]) : Number(matches[i][2*j+2]) - Number(mostRecent[2]);
+        if (matches[i][2*j+1] == mostRecent[2]) {
+          var p1wins = add ? Number(matches[i][2*j+2]) + Number(mostRecent[1]) : Number(matches[i][2*j+2]) - Number(mostRecent[1]);
           var cell1 = [i+2,9+2*j];
           found = true;
         }
       }
-    } else if (matches[i][0] == mostRecent[3]) {
+    } else if (matches[i][0] == mostRecent[2]) {
       for (let j=0; j < options[3][1]; j++) {
-        if (matches[i][2*j+1] == mostRecent[1]) {
-          var p2wins = add ? Number(matches[i][2*j+2]) + Number(mostRecent[4]) : Number(matches[i][2*j+2]) - Number(mostRecent[4]);
+        if (matches[i][2*j+1] == mostRecent[0]) {
+          var p2wins = add ? Number(matches[i][2*j+2]) + Number(mostRecent[3]) : Number(matches[i][2*j+2]) - Number(mostRecent[3]);
           var cell2 = [i+2,9+2*j];
         }
       }
     }
   }
   if (found) {
+    var results = sheet.getSheetByName('Results');
     standings.getRange(cell1[0], cell1[1]+1).setValue(p1wins);
     standings.getRange(cell2[0], cell2[1]+1).setValue(p2wins);
     if (p1wins + p2wins == options[4][1]) {
@@ -1017,9 +1021,9 @@ function updateRandom(stage, add) {
       standings.getRange(cell2[0], cell2[1]).setFontColor('#990000');    
     }
     if (add) {
-      processing.appendRow([mostRecent[1], mostRecent[2], mostRecent[4]]);
-      processing.appendRow([mostRecent[3], mostRecent[4], mostRecent[2]]);
-      sheet.getSheetByName('Results').getRange(results.length, 7).setValue(stages[stage].name);
+      processing.appendRow([mostRecent[0], mostRecent[1], mostRecent[3]]);
+      processing.appendRow([mostRecent[2], mostRecent[3], mostRecent[1]]);
+      results.getRange(results.getDataRange().getNumRows(), 7).setValue(stages[stage].name);
       sendResultToDiscord('Standings', standings.getSheetId());
     } else {
       //find the last processing row
@@ -1031,7 +1035,7 @@ function updateRandom(stage, add) {
         }
       }
       processing.getRange(frlength-1, 1, 2, 3).setValues([['','',''],['','','']]);
-      sheet.getSheetByName('Results').deleteRow(results.length);
+      results.getRange(results.getDataRange().getNumRows(), 7).setValue('');
     }
   }
   
@@ -1149,7 +1153,7 @@ function createGroups(stage) {
         let aggTable = [['Seed', 'Player', 'Place', 'Group', 'Win Percentage']];
         for (let j=0; j<ngroups; j++) {
           if (i == options[3][1]-1) {
-            let openCheckString = "=IF(regexmatch('" + stages[stage].name + " Processing'!" + (i*ngroups+j+2) + ",\"^OPEN\\d+$\"),,";
+            let openCheckString = "=IF(regexmatch('" + stages[stage].name + " Processing'!T" + (i*ngroups+j+2) + ",\"^OPEN\\d+$\"),,";
             aggTable.push([openCheckString + (j+1) + ")",
               openCheckString + "'" + stages[stage].name + " Processing'!T" + (i*ngroups+j+2) + ")",
               openCheckString + "'" + stages[stage].name + " Processing'!U" + (i*ngroups+j+2) + ")",
@@ -1210,33 +1214,34 @@ function createGroups(stage) {
 
 function updateGroups(stage, add) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
-  var results = sheet.getSheetByName('Results').getDataRange().getValues();
-  var mostRecent = results[results.length - 1];
+  var form = FormApp.openByUrl(sheet.getSheetByName('Administration').getDataRange().getValues()[2][1]).getResponses();
+  var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse()});
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
   var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
   var groups = processing.getRange(1, 1, options[3][1]*Math.ceil(options[2][1]/options[3][1]), 2).getValues();
+  var results = sheet.getSheetByName('Results');
   
-  if (mostRecent[1] == mostRecent[3]) {return false;}
+  if (mostRecent[0] == mostRecent[2]) {return false;}
   
   if (add) {
     for (let i=0; i<options[2][1]; i++) {
-      if (groups[i][0] == mostRecent[1]) {
+      if (groups[i][0] == mostRecent[0]) {
         var p1Group = groups[i][1];
-      } else if (groups[i][0] == mostRecent[3]) {
+      } else if (groups[i][0] == mostRecent[2]) {
         var p2Group = groups[i][1];
       }
     }
     if (p1Group == p2Group) {
-      sheet.getSheetByName('Results').getRange(results.length, 7).setValue(stages[stage].name);
-      processing.appendRow([mostRecent[1], p1Group, mostRecent[2], mostRecent[4]]);
-      processing.appendRow([mostRecent[3], p1Group, mostRecent[4], mostRecent[2]]);
+      processing.appendRow([mostRecent[0], p1Group, mostRecent[1], mostRecent[3]]);
+      processing.appendRow([mostRecent[2], p1Group, mostRecent[3], mostRecent[1]]);
+      results.getRange(results.getDataRange().getNumRows(), 7).setValue(stages[stage].name);
       sendResultToDiscord('Standings',sheet.getSheetByName(stages[stage].name + ' Standings').getSheetId());
       return true;
     } else {
       return false;
     }
   } else {
-    sheet.getSheetByName('Results').deleteRow(results.length);
+    results.getRange(results.getDataRange().getNumRows(), 7).setValue('');
     let flatResults = processing.getRange('A:A').getValues();
     let frlength = flatResults.length;
     for (let i=groups.length+1; i<frlength; i++) {

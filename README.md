@@ -55,7 +55,7 @@ May take an additional parameter which tells it whether the update is an additio
 To match existing names, called `update<Stage_type>`.
 Should return true if an update took place, and flase otherwise.
 
-This should take the most recent result and place it where it needs to go to update the stage to include it. It should be able to handle partial matches.
+This should take the most recent result (from the form, not the spreadsheet) and place it where it needs to go to update the stage to include it. It should be able to handle partial matches.
 
 You can access the most recent result through:
 ```
