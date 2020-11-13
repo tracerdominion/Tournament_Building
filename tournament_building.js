@@ -449,13 +449,13 @@ function updateSingleBracket(stage, add) {
         let bottomwins = match[1][1] + (add?1:-1)*mostRecent[3];
         bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues([[topwins],[bottomwins]]);
         if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-          bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(mostRecent[0]);
+          if (j != nround) {bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(mostRecent[0])};
           bracket.getRange(space + 2*i*space, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-          bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(mostRecent[2]);
+          if (j != nround) {bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(mostRecent[2])};
           bracket.getRange(space + 2*i*space+1, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if (!add) {
-          bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue('');
+          if (j != nround) {bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue('')};
           bracket.getRange(space + 2*i*space, 2*j, 2, 2).setBackground(null);
         }
         found = true;
@@ -465,13 +465,13 @@ function updateSingleBracket(stage, add) {
         let bottomwins = match[1][1] + (add?1:-1)*mostRecent[1];
         bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues([[topwins],[bottomwins]]);
         if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-          bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(mostRecent[2]);
+          if (j != nround) {bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(mostRecent[2])};
           bracket.getRange(space + 2*i*space, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-          bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(mostRecent[0]);
+          if (j != nround) {bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(mostRecent[0])};
           bracket.getRange(space + 2*i*space+1, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if (!add) {
-          bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue('');
+          if (j != nround) {bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue('')};
           bracket.getRange(space + 2*i*space, 2*j, 2, 2).setBackground(null);
         }
         found = true;
