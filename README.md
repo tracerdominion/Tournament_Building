@@ -51,7 +51,6 @@ Once completed, it should be appropriately added to the switch statements in bot
 #### Update (with new results) functions
 
 Should take a parameter `stage` which is the index of the stage in the stages array at the very top of the script.
-May take an additional parameter which tells it whether the update is an addition or removal. Since removals often require the same searches as additions, it can be useful to handle both in the same function.
 To match existing names, called `update<Stage_type>`.
 Should return true if an update took place, and flase otherwise.
 
@@ -59,19 +58,19 @@ This should take the most recent result (from the form, not the spreadsheet) and
 
 You can access the most recent result through:
 ```
-var sheet = SpreadsheetApp.getActiveSpreadsheet();
-var results = sheet.getSheetByName('Results').getDataRange().getValues();
-var mostRecent = results[results.length - 1];
+var form = FormApp.openByUrl(sheet.getSheetByName('Administration').getDataRange().getValues()[2][1]).getResponses();
+var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse();});
 ```
 
 `mostRecent` will be an array of length 6. Relevant are the items at indexes 1-4:
-* `mostRecent[1]` is the first player
-* `mostRecent[2]` is wins for the first player (as a string - be careful)
-* `mostRecent[3]` is the second player
-* `mostRecent[4]` is wins for the second player (again as a string)
+* `mostRecent[0]` is the first player
+* `mostRecent[1]` is wins for the first player (as a string - be careful)
+* `mostRecent[2]` is the second player
+* `mostRecent[3]` is wins for the second player (again as a string)
 
 In addition to doing whatever is needed to add these results, if successfully added it should also:
 * Append the stage name to the most recent result. This can be done with `sheet.getSheetByName('Results').getRange(results.length, 7).setValue(stages[stage].name)` assuming `sheet` is defined as above.
+* Append location data to the most recent result for easier removal. This can be done with `results.getRange(results.getDataRange().getNumRows(), 8).setFontColor('#ffffff').setValue(<location_data>)` assuming sheet is defined as above.
 * Make a call to the function `sendResultToDiscord(displayType, gid)` to show the results embed. `displayType` should be a string that describes the output of the stage, for example `'Standings'` or `'Bracket'`. `gid` should be the id of that output sheet, accessed through `getSheetId()`([ref](https://developers.google.com/apps-script/reference/spreadsheet/sheet#getSheetId())).
 * Return true
 
@@ -79,12 +78,11 @@ Once completed, it should be appropriately added to the switch statement in the 
 
 #### Removal functions
 
-Should take a parameter `stage` which is the index of the stage in the stages array at the very top of the script.
-To this point in time all removal functions have been incorporated into the stage's Update function.
+Should take parameters `stage`, which is the index of the stage in the stages array at the very top of the script, and `row`, which is the row in the Results sheet that is to be removed.
+To match existing names, called `remove<Stage_type>`.
 
-This should again take the most recent result, but in this case remove it. It can be assumed that the result has been already been added whenever this is called. It should also delete the last line of the Results sheet.
-
-Once completed, it should be appropriately added to the switch statement in the `removeLastResult()` function.
+This should take the result in the `row` numbered row of the results sheet and attempt to remove it. If there are dependent matches with results (for example the match a winner plays in) it should fail to remove the result and log a failure message and reason. Otherwise, it should remove any sign of it from sheets intended for display. 
+It should also remove the stage name label from that row in the results sheet, to indicate that the result is not being accounted for anywhere.
 
 #### Helpers
 
