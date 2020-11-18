@@ -4,6 +4,9 @@ var stages = [];
 // The sheet that contains the player list in its second column
 var playerListSheet = '';
 
+//If wanting to remove a result
+var rowToRemove = 0;
+
 function setupInitial() { 
   adminSetup();
   renameResults();
@@ -38,8 +41,6 @@ function setupSheets() {
 }
 
 function removeResult() {
-  var rowToRemove = 0;
-  
   var removalStageName = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Results').getRange(rowToRemove,7).getValue();
   var removalStage = 'none';
   for (let i=0; i<stages.length; i++) {
@@ -69,7 +70,9 @@ function removeResult() {
       case 'groups':
         break;
     }
-  }  
+  } else {
+    Logger.log('Removal Failure: the result is not in any stage');
+  }
 }
 
 function testWebhook() {
