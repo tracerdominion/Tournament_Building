@@ -38,6 +38,7 @@ function setupSheets() {
         break;
     }
   }
+  SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Administration').setActiveSelection('C7');
 }
 
 function removeResult() {
@@ -68,6 +69,7 @@ function removeResult() {
         break;
       case 'group':
       case 'groups':
+        removeGroups(removalStage, rowToRemove);
         break;
     }
   } else {
@@ -150,6 +152,7 @@ function remakeStages() {
       }
     }
   }
+  sheet.setActiveSheet(sheet.getSheetByName('Administration'));
 }
 
 
@@ -248,6 +251,7 @@ function addStages() {
   }
   
   admin.getRange(7, 3, stages.length, 2).insertCheckboxes();
+  sheet.setActiveSheet(options);
 }
 
 function onFormSubmit() {
@@ -541,10 +545,11 @@ function updateSingleBracket(stage) {
   }
   
   if (found) {
-    var results = sheet.getSheetByName('Results');
-    results.getRange(results.getDataRange().getNumRows(), 7).setValue(stages[stage].name);
-    results.getRange(results.getDataRange().getNumRows(), 8).setFontColor('#ffffff').setValue(loc);
     sendResultToDiscord('Bracket', bracket.getSheetId());
+    var results = sheet.getSheetByName('Results');
+    var resultsLength = results.getDataRange().getNumRows();
+    results.getRange(resultsLength, 7).setValue(stages[stage].name);
+    results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(loc);
   }
   
   return found;
@@ -718,14 +723,14 @@ function updateSwiss(stage) {
       found = true;
     }    
     if (found) {
-      var results = sheet.getSheetByName('Results');
-      var resultsLength = results.getDataRange().getNumRows();
       swiss.getRange(i+2, 7, 1, 2).setValues([[leftwins, rightwins]]);
       processing.getRange(nextOpen, 1, 2, 4).setValues([[mostRecent[0], mostRecent[2], mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], mostRecent[3], mostRecent[1]]]);
       processing.getRange('E1').setValue(nextOpen + 2);
+      sendResultToDiscord('Standings', swiss.getSheetId());
+      var results = sheet.getSheetByName('Results');
+      var resultsLength = results.getDataRange().getNumRows();
       results.getRange(resultsLength, 7).setValue(stages[stage].name);
       results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(swiss.getRange('G1').getValue() + ',' + i + ',' + nextOpen);
-      sendResultToDiscord('Standings', swiss.getSheetId());
       //make next round's match list if needed
       newSwissRound(stage);
       break;
@@ -885,7 +890,6 @@ function removeSwiss(stage, row) {
   }
   processing.getRange(loc[2], 1, 2, 4).setValues([['','','',''],['','','','']]);
   let match = swiss.getRange(loc[1] + 2, 6, 1, 4).getValues()[0];
-  Logger.log(match);
   if (match[0] == removal[1]) {
     var leftwins = match[1] - removal[2];
     var rightwins = match[2] - removal[4];
@@ -1143,8 +1147,6 @@ function updateRandom(stage) {
     }
   }
   if (found) {
-    var results = sheet.getSheetByName('Results');
-    var resultsLength = results.getDataRange().getNumRows();
     standings.getRange(cell1[0], cell1[1]+1).setValue(p1wins);
     standings.getRange(cell2[0], cell2[1]+1).setValue(p2wins);
     if (p1wins + p2wins == options[4][1]) {
@@ -1159,9 +1161,11 @@ function updateRandom(stage) {
     }
     processing.getRange(nextOpen, 1, 2, 3).setValues([[mostRecent[0], mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[3], mostRecent[1]]]);
     processing.getRange('D1').setValue(nextOpen + 2);
+    sendResultToDiscord('Standings', standings.getSheetId());
+    var results = sheet.getSheetByName('Results');
+    var resultsLength = results.getDataRange().getNumRows();
     results.getRange(resultsLength, 7).setValue(stages[stage].name);
     results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(cell1.toString() + ',' + cell2.toString() + ',' + nextOpen);
-    sendResultToDiscord('Standings', standings.getSheetId());
   }
   
   return found;
@@ -1212,16 +1216,18 @@ function groupsOptions(stage) {
 function createGroups(stage) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
+  var ppg = Number(options[3][1]);
   var standings = sheet.insertSheet(stages[stage].name + ' Standings');
-  standings.deleteColumns(6, 21);
+  standings.deleteColumns(6+ppg, 21-ppg);
   standings.setColumnWidth(1, 150);
-  standings.setColumnWidths(2, 4, 50);
+  standings.setColumnWidths(2, 4+ppg, 50);
+  standings.getRange('E:E').setNumberFormat('0.000');
   var processing = sheet.insertSheet(stages[stage].name + ' Processing');
   var players = [];
   for (let i=0; i<options[2][1]; i++) {
     players.push("=index('" + options[1][1] + "'!B:B," + (i+2) + ")");
   }
-  var ngroups = Math.ceil(options[2][1]/options[3][1]);
+  var ngroups = Math.ceil(options[2][1]/ppg);
   
   //establish groups
   var groups = [];
@@ -1229,138 +1235,175 @@ function createGroups(stage) {
   switch (options[4][1].toLowerCase()) {
     case 'random':
       shuffle(players);
-      while (players.length % options[3][1]) {players.push('OPEN'+ ++openCounter);}
+      while (players.length % ppg) {players.push('OPEN'+ ++openCounter);}
       break;
     case 'pool draw':
-      while (players.length % options[3][1]) {players.push('OPEN'+ ++openCounter);}
-      for (let i=0; i<options[3][1]; i++) {
+      while (players.length % ppg) {players.push('OPEN'+ ++openCounter);}
+      for (let i=0; i<ppg; i++) {
         shuffle(players, ngroups*i, ngroups*(i+1)-1);
       }
     default:
-      while (players.length % options[3][1]) {players.push('OPEN'+ ++openCounter);}
+      while (players.length % ppg) {players.push('OPEN'+ ++openCounter);}
   }
   var pllength = players.length;
+  processing.getRange('F1').setValue(pllength + 2);
   for (let i=0; i<pllength; i++) {
     if (Math.floor(i/ngroups) % 2) {
-      groups.push(/^OPEN\d+$/.test(players[i]) ? [players[i], ngroups-1-(i%ngroups), -1, 2] : [players[i], ngroups-1-(i%ngroups), 0, 0]);
+      groups.push(/^OPEN\d+$/.test(players[i]) ? [players[i], '', ngroups-1-(i%ngroups), -1, 2] : [players[i], '', ngroups-1-(i%ngroups), 0, 0]);
     } else {
-      groups.push(/^OPEN\d+$/.test(players[i]) ? [players[i], i%ngroups, -1, 2] : [players[i], i%ngroups, 0, 0]); 
+      groups.push(/^OPEN\d+$/.test(players[i]) ? [players[i], '', i%ngroups, -1, 2] : [players[i], '', i%ngroups, 0, 0]); 
     }
   }
-  processing.getRange(1, 1, groups.length, 4).setValues(groups);
-  processing.getRange('F1').setFormula('=query(A:D, "select A, avg(B), sum(C), sum(C)+sum(D) where not A=\'\' group by A")');
-  processing.getRange('J2').setFormula('=arrayformula(iferror(H2:H' + (pllength + 1) + '/I2:I' + (pllength + 1) + ',0))');
-  processing.getRange('L1').setFormula('=query(F:J, "select F, G, I/' + options[6][1] + ', H, I-H, J where not F=\'\' order by G, J desc")');
-  var ranks = [];
-  for (let i=0; i<ngroups; i++) {
-    for (let j=1; j<=options[3][1]; j++) {
-      ranks.push([j]);
+  processing.getRange(1, 1, groups.length, 5).setValues(groups);
+  processing.getRange('G1').setValue('=query(U:Z, "select U, V, X/' + options[6][1] + ', W, X-W, Y where not U=\'\' order by V, Y desc, Z desc")');
+  processing.getRange(2, 13, pllength, 1).setValues(Array.from({length: pllength}, (x,i) => [1+(i%ppg)]));
+  processing.getRange('U1').setFormula('=query(A:E, "select A, avg(C), sum(D), sum(D)+sum(E) where not A=\'\' group by A order by avg(C)")');
+  processing.getRange('Y2').setFormula('=arrayformula(iferror(W2:W' + (pllength + 1) + '/X2:X' + (pllength + 1) + ',0))');
+  var indScores = [];
+  var tbs = [];
+  for (let i=0; i<pllength; i++) {
+    indScores.push([]);
+    for (let j=0; j<ppg; j++) {
+      indScores[i].push('=iferror(index(query(A:E, "select sum(D) where A=\'"&U'+(i+2)+'&"\' and B=\'"&U'+(i+2+j-(i%ppg))+'&"\'"),2))');
     }
+    tbs.push(['=sum(arrayformula(if(Y'+(i+2)+'=transpose(Y'+(2+ppg*Math.floor(i/ppg))+':Y'+(1+ppg*(1+Math.floor(i/ppg)))+'),\
+AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
   }
-  processing.getRange(2, 18, ranks.length).setValues(ranks);
+  processing.getRange(2, 27, indScores.length, ppg).setValues(indScores);
+  processing.getRange(2, 26, tbs.length, 1).setValues(tbs);
   
   //make standings
   var tables = [];
   var groupCounter = 1;
+  var procSheet = "'" + stages[stage].name + " Processing'!";
   for (let i=0; i<pllength; i++) {
-    if (i % options[3][1] == 0) {
-      tables.push(['','','','','']);
-      tables.push(['Group ' + groupCounter++, '', '', '', '']);
+    if (i % ppg == 0) {
+      tables.push(['Group ' + groupCounter++, '', '', '', '', 'Wins Grid'].concat(Array.from({length: ppg-1}, x => '')));
       standings.getRange(tables.length, 1, 1, 5).merge().setHorizontalAlignment('center').setBackground('#bdbdbd');
-      tables.push(['Player','Played','Wins','Losses','Win Pct']);
+      standings.getRange(tables.length, 6, 1, ppg).merge().setHorizontalAlignment('center').setBackground('#bdbdbd');
+      tables.push(['Player','Played','Wins','Losses','Win %'].concat(Array.from({length: ppg}, (x,j) => '=left(A' + (tables.length + j + 2) + ',3)')));
     }
-    if (i % options[3][1] == options[3][1]-1) {
-      tables.push(["=IF(regexmatch('" + stages[stage].name + " Processing'!L" + (i+2) + ",\"^OPEN\\d+$\"),, '" + stages[stage].name + " Processing'!L" + (i+2)+ ")",
-        "=IF(regexmatch('" + stages[stage].name + " Processing'!L" + (i+2) + ",\"^OPEN\\d+$\"),, '" + stages[stage].name + " Processing'!N" + (i+2)+ ")",
-        "=IF(regexmatch('" + stages[stage].name + " Processing'!L" + (i+2) + ",\"^OPEN\\d+$\"),, '" + stages[stage].name + " Processing'!O" + (i+2)+ ")",
-        "=IF(regexmatch('" + stages[stage].name + " Processing'!L" + (i+2) + ",\"^OPEN\\d+$\"),, '" + stages[stage].name + " Processing'!P" + (i+2)+ ")",
-        "=IF(regexmatch('" + stages[stage].name + " Processing'!L" + (i+2) + ",\"^OPEN\\d+$\"),, '" + stages[stage].name + " Processing'!Q" + (i+2)+ ")"
+    if (i % ppg == ppg-1) {
+      tables.push(["=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "G" + (i+2)+ ")",
+        "=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "I" + (i+2)+ ")",
+        "=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "J" + (i+2)+ ")",
+        "=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "K" + (i+2)+ ")",
+        "=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "L" + (i+2)+ ")",
       ]);
-      tables.push(['','','','','']);
     } else {
-      tables.push(["='" + stages[stage].name + " Processing'!L" + (i+2), "='" + stages[stage].name + " Processing'!N" + (i+2),
-        "='" + stages[stage].name + " Processing'!O" + (i+2), "='" + stages[stage].name + " Processing'!P" + (i+2), "='" + stages[stage].name + " Processing'!Q" + (i+2)]);
+      tables.push(["=" + procSheet + "G" + (i+2), "=" + procSheet + "I" + (i+2), "=" + procSheet + "J" + (i+2), "=" + procSheet + "K" + (i+2), "=" + procSheet + "L" + (i+2)]);
+    }
+    let last = tables.length - 1;
+    for (let j=0; j<ppg; j++) {
+      let toprow = 2+ppg*Math.floor(i/ppg);
+      let bottomrow = 1+ppg*(1+Math.floor(i/ppg));
+      tables[last].push("=iferror(index(" + procSheet + "AA" + toprow + ":" + columnFinder(26+ppg) + bottomrow + 
+        ",match(A" + (last+1) + "," + procSheet + "U" + toprow + ":U" + bottomrow +
+        "),match(A" + (last + 1 + j - (i%ppg)) + "," + procSheet + "U" + toprow + ":U" + bottomrow + ")))"
+      );
+    }
+    if (i % ppg == ppg-1) {
+      tables.push(Array.from({length: 5+ppg}, x => ''));
+      tables.push(Array.from({length: 5+ppg}, x => ''));
     }
   }
-  standings.getRange(1, 1, tables.length, 5).setValues(tables);
+  standings.getRange(1, 1, tables.length, 5+ppg).setValues(tables);
+  standings.deleteRows(tables.length, 1001-tables.length)
   
   //make aggregates
+  function aggFormat() {
+    aggregate.setFrozenRows(1);
+    aggregate.deleteColumns(9, 18);
+    aggregate.setColumnWidth(1, 50);
+    aggregate.setColumnWidth(2, 150);
+    aggregate.setColumnWidth(3, 50);
+    aggregate.setColumnWidth(4, 150);
+    aggregate.setColumnWidths(5, 4, 50);
+  }  
   switch (options[5][1].toLowerCase()) {
     case 'wins only':
-      processing.getRange('T1').setFormula('=query(L:R, "select L,R,M,Q where not L=\'\' order by Q desc")');
-      var aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation');
-      var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Win Percentage']];
-      for (let i=0; i<options[2][1]; i++) {
-        aggTable.push([i+1, "='" + stages[stage].name + " Processing'!T" + (i+2), "='" + stages[stage].name + " Processing'!U" + (i+2),
-          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (i+2) + ")",
-          "='" + stages[stage].name + " Processing'!W" + (i+2)
+      processing.getRange('N1').setFormula('=query(G:M, "select G,M,H,I,J,K,L where not G=\'\' order by L desc")');
+      var aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation');      
+      aggregate.deleteRows(pllength + 2, 999-pllength);
+      aggFormat();
+      var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Played', 'Wins', 'Losses', 'Win %']];
+      for (let i=0; i<Number(options[2][1]); i++) {
+        let prIn = i+2;
+        aggTable.push([i+1, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
+          "=index('" + stages[stage].name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
+          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
         ]);
       }
-      aggregate.getRange(1, 1, aggTable.length, 5).setValues(aggTable);
+      aggregate.getRange(1, 1, aggTable.length, 8).setValues(aggTable);
       break;
     case 'separate':
-      processing.getRange('T1').setFormula('=query(L:R, "select L,R,M,Q where not L=\'\' order by R, Q desc")');
+      processing.getRange('N1').setFormula('=query(G:M, "select G,M,H,I,J,K,L where not G=\'\' order by M, L desc")');
       for (let i=0; i<options[3][1]; i++) {
-        let aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation ' + (i+1) + ((i==0) ? 'sts' : (i==1) ? 'nds' : (i==2) ? 'rds' : 'ths'));
-        let aggTable = [['Seed', 'Player', 'Place', 'Group', 'Win Percentage']];
+        var aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation ' + (i+1) + ((i==0) ? 'sts' : (i==1) ? 'nds' : (i==2) ? 'rds' : 'ths'));
+        aggregate.deleteRows(ngroups + 2, 999-ngroups);
+        aggFormat();
+        let aggTable = [['Seed', 'Player', 'Place', 'Group', 'Played', 'Wins', 'Losses', 'Win %']];
         for (let j=0; j<ngroups; j++) {
+          let prIn = i*ngroups+j+2;
           if (i == options[3][1]-1) {
-            let openCheckString = "=IF(regexmatch('" + stages[stage].name + " Processing'!T" + (i*ngroups+j+2) + ",\"^OPEN\\d+$\"),,";
-            aggTable.push([openCheckString + (j+1) + ")",
-              openCheckString + "'" + stages[stage].name + " Processing'!T" + (i*ngroups+j+2) + ")",
-              openCheckString + "'" + stages[stage].name + " Processing'!U" + (i*ngroups+j+2) + ")",
-              openCheckString + "index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (i*ngroups+j+2) + "))",
-              openCheckString + "'" + stages[stage].name + " Processing'!W" + (i*ngroups+j+2) + ")"
+            let openCheckString = "=IF(regexmatch(" + procSheet + "N" + prIn + ",\"^OPEN\\d+$\"),,";
+            aggTable.push([openCheckString + (j+1) + ")", openCheckString + procSheet + "N" + prIn + ")", openCheckString + procSheet + "O" + prIn + ")",
+              openCheckString + "index('" + stages[stage].name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + prIn + "))",
+              openCheckString + procSheet + "Q" + prIn + ")", openCheckString + procSheet + "R" + prIn + ")", openCheckString + procSheet + "S" + prIn + ")", openCheckString + procSheet + "T" + prIn + ")"
             ]);
           } else {
-            aggTable.push([j+1,
-              "='" + stages[stage].name + " Processing'!T" + (i*ngroups+j+2),
-              "='" + stages[stage].name + " Processing'!U" + (i*ngroups+j+2),
-              "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (i*ngroups+j+2) + ")",
-              "='" + stages[stage].name + " Processing'!W" + (i*ngroups+j+2)
+            aggTable.push([j+1, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
+              "=index('" + stages[stage].name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
+              "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
             ]);
           } 
         }
-        aggregate.getRange(1, 1, aggTable.length, 5).setValues(aggTable);
+        aggregate.getRange(1, 1, aggTable.length, 8).setValues(aggTable);
       }
       break;
     case 'fixed':
-      processing.getRange('T1').setFormula('=query(L:R, "select L,R,M,Q where not L=\'\' order by R, M")');
+      processing.getRange('N1').setFormula('=query(G:M, "select G,M,H,I,J,K,L where not G=\'\' order by M, H")');
       var aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation');
-      var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Win Percentage']];
+      aggFormat();
+      aggregate.deleteRows(2+2*ngroups, 999-2*ngroups);
+      var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Played', 'Wins', 'Losses', 'Win %']];
       for (let i=0; i<ngroups; i++) {
-        aggTable.push([i+1, "='" + stages[stage].name + " Processing'!T" + (i+2), "='" + stages[stage].name + " Processing'!U" + (i+2),
-          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (i+2) + ")",
-          "='" + stages[stage].name + " Processing'!W" + (i+2)
+        let prIn = i+2;
+        aggTable.push([i+1, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
+          "=index('" + stages[stage].name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
+          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
         ]);
       }
       for(let i=ngroups; i>0; i-=2) {
-        aggTable.push([2*ngroups+1-i, "='" + stages[stage].name + " Processing'!T" + (ngroups+i), "='" + stages[stage].name + " Processing'!U" + (ngroups+i),
-          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (ngroups+i) + ")",
-          "='" + stages[stage].name + " Processing'!W" + (ngroups+i)
+        let prIn = ngroups+i;
+        aggTable.push([2*ngroups+1-i, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
+          "=index('" + stages[stage].name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
+          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
         ]);
-        aggTable.push([2*ngroups+2-i, "='" + stages[stage].name + " Processing'!T" + (ngroups+i+1), "='" + stages[stage].name + " Processing'!U" + (ngroups+i+1),
-          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (ngroups+i+1) + ")",
-          "='" + stages[stage].name + " Processing'!W" + (ngroups+i+1)
+        prIn = ngroups+i+1;
+        aggTable.push([2*ngroups+2-i, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
+          "=index('" + stages[stage].name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
+          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
         ]);
       }
-      aggregate.getRange(1, 1, aggTable.length, 5).setValues(aggTable);
+      aggregate.getRange(1, 1, aggTable.length, 8).setValues(aggTable);
       break;
     case 'none':
       break;
     default:
-      processing.getRange('T1').setFormula('=query(L:R, "select L,R,M,Q where not L=\'\' order by R, Q desc")');
+      processing.getRange('N1').setFormula('=query(G:M, "select G,M,H,I,J,K,L where not G=\'\' order by M, L desc")');
       var aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation');
-      var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Win Percentage']];
-      for (let i=0; i<options[2][1]; i++) {
-        aggTable.push([i+1,
-          "='" + stages[stage].name + " Processing'!T" + (i+2),
-          "='" + stages[stage].name + " Processing'!U" + (i+2),
-          "=index('" + stages[stage].name + " Standings'!A:A, 2+" + (4 + Number(options[3][1])) + "*'" + stages[stage].name + " Processing'!V" + (i+2) + ")",
-          "='" + stages[stage].name + " Processing'!W" + (i+2)
+      aggregate.deleteRows(pllength + 2, 999-pllength);
+      aggFormat();
+      var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Played', 'Wins', 'Losses', 'Win %']];
+      for (let i=0; i<Number(options[2][1]); i++) {
+        let prIn = i+2;
+        aggTable.push([i+1, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
+          "=index('" + stages[stage].name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
+          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
         ]);
       }
-      aggregate.getRange(1, 1, aggTable.length, 5).setValues(aggTable);
+      aggregate.getRange(1, 1, aggTable.length, 8).setValues(aggTable);
   }
 }
 
@@ -1370,27 +1413,40 @@ function updateGroups(stage) {
   var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse()});
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
   var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
-  var groups = processing.getRange(1, 1, options[3][1]*Math.ceil(options[2][1]/options[3][1]), 2).getValues();
-  var results = sheet.getSheetByName('Results');
+  var nextOpen = Number(processing.getRange('F1').getValue());
+  var groups = processing.getRange(1, 1, options[3][1]*Math.ceil(options[2][1]/options[3][1]), 3).getValues();
   
   if (mostRecent[0] == mostRecent[2]) {return false;}
   
   for (let i=0; i<options[2][1]; i++) {
     if (groups[i][0] == mostRecent[0]) {
-      var p1Group = groups[i][1];
+      var p1Group = groups[i][2];
     } else if (groups[i][0] == mostRecent[2]) {
-      var p2Group = groups[i][1];
+      var p2Group = groups[i][2];
     }
   }
   if (p1Group == p2Group) {
-    processing.appendRow([mostRecent[0], p1Group, mostRecent[1], mostRecent[3]]);
-    processing.appendRow([mostRecent[2], p1Group, mostRecent[3], mostRecent[1]]);
-    results.getRange(results.getDataRange().getNumRows(), 7).setValue(stages[stage].name);
+    processing.getRange(nextOpen, 1, 2, 5).setValues([[mostRecent[0], mostRecent[2], p1Group, mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], p1Group, mostRecent[3], mostRecent[1]]])
+    processing.getRange('F1').setValue(nextOpen+2);
     sendResultToDiscord('Standings',sheet.getSheetByName(stages[stage].name + ' Standings').getSheetId());
+    var results = sheet.getSheetByName('Results');
+    var resultsLength = results.getDataRange().getNumRows();
+    results.getRange(resultsLength, 7).setValue(stages[stage].name);
+    results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(nextOpen);
     return true;
   } else {
     return false;
   }
+}
+
+function removeGroups(stage, row) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var results = sheet.getSheetByName('Results');
+  var removal = results.getRange(row, 1, 1, 8).getValues()[0];
+  var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
+  
+  processing.getRange(removal[7], 1, 2, 5).setValues([['','','','',''],['','','','','']]);
+  results.getRange(row, 7, 1, 2).setValues([['','']]);
 }
 
 
@@ -1865,10 +1921,11 @@ function updateDoubleBracket(stage) {
   }
   
   if (found) {
-    var results = sheet.getSheetByName('Results');
-    results.getRange(results.getDataRange().getNumRows(), 7).setValue(stages[stage].name);
-    results.getRange(results.getDataRange().getNumRows(), 8).setFontColor('#ffffff').setValue(loc);
     sendResultToDiscord('Bracket', bracket.getSheetId());
+    var results = sheet.getSheetByName('Results');
+    var resultsLength = results.getDataRange().getNumRows();
+    results.getRange(resultsLength, 7).setValue(stages[stage].name);
+    results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(loc);    
   }
   return found;
 }
