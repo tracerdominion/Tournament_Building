@@ -1319,6 +1319,7 @@ AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
     aggregate.setColumnWidth(3, 50);
     aggregate.setColumnWidth(4, 150);
     aggregate.setColumnWidths(5, 4, 50);
+	aggregate.getRange('H:H').setNumberFormat('0.000');
   }  
   switch (options[5][1].toLowerCase()) {
     case 'wins only':
