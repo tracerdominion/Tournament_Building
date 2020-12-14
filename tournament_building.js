@@ -258,7 +258,7 @@ function onFormSubmit() {
   var admin = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Administration').getDataRange().getValues();
   var found = false;
   
-  for (let i=0; i < stages.length; i++) {
+  for (let i=stages.length-1; i>=0; i--) {
     if ((admin[i+6][2]) && (!admin[i+6][3])) {
       switch (stages[i].type.toLowerCase()) {
         case 'single':
