@@ -26,12 +26,14 @@ Should take a single parameter `stage` which is the index of the stage in the st
 Should return an array of length 2 arrays (subsequently called 'rows') which are key-value pairs for user provided options. There should be no more than 9 total rows.
 To match existing names, called `<stage_type>Options`.
 
+This function should place key-value pairs for user provided options at the top of the options sheet. There should be no more than 8 options, for no more than 9 total rows used.
+
 The first 3 rows should be the following:
 ```
 ["''" + stages[stage].name + "' <stage type name> Options", ""],["Seeding Sheet", ""],["Number of Players", ""]
 ```
 
-You may include preset values for some keys as suggestions. They do not need to match the default when you eventually use the option.
+You may include preset values for some keys as suggestions. Values which should be one of a number of options should have data validation with dropdown placed on the corresponding cells (see the Single Elimination Seeding Method option as an example).
 
 While not unacceptable, I recommend not asking for values used purely for aesthetics. Rather, inform the user in documentation that they may change these things as they wish.
 
