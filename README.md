@@ -81,6 +81,7 @@ Once completed, it should be appropriately added to the switch statement in the 
 #### Removal functions
 
 Should take parameters `stage`, which is the index of the stage in the stages array at the very top of the script, and `row`, which is the row in the Results sheet that is to be removed.
+Should return true if the result is able to be removed, and false otherwise.
 To match existing names, called `remove<Stage_type>`.
 
 This should take the result in the `row` numbered row of the results sheet and attempt to remove it. If there are dependent matches with results (for example the match a winner plays in) it should fail to remove the result and log a failure message and reason. Otherwise, it should remove any sign of it from sheets intended for display. 

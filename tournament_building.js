@@ -42,35 +42,53 @@ function setupSheets() {
 }
 
 function removeResult() {
-  var removalStageName = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Results').getRange(rowToRemove,7).getValue();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var admin = sheet.getSheetByName('Administration').getDataRange().getValues();
+  var removal = sheet.getSheetByName('Results').getRange(rowToRemove,1,1,8).getValues()[0];
+  var success = false;
+
   var removalStage = 'none';
   for (let i=0; i<stages.length; i++) {
-    if (stages[i].name == removalStageName) {
+    if (stages[i].name == removal[6]) {
       removalStage = i;
+      break;
     }
   }
   if (removalStage != 'none') {
-    switch (stages[removalStage].type.toLowerCase()) {
-      case 'single':
-      case 'single elimination':
-        removeSingleBracket(removalStage, rowToRemove);
-        break;
-      case 'double':
-      case 'double elimination':
-        removeDoubleBracket(removalStage, rowToRemove);
-        break;
-      case 'swiss':
-      case 'swiss system':
-        removeSwiss(removalStage, rowToRemove);
-        break;
-      case 'random':
-      case 'preset random':
-        removeRandom(removalStage, rowToRemove);
-        break;
-      case 'group':
-      case 'groups':
-        removeGroups(removalStage, rowToRemove);
-        break;
+    if (admin[removalStage + 6][2] && !admin[removalStage + 6][3]) {
+      switch (stages[removalStage].type.toLowerCase()) {
+        case 'single':
+        case 'single elimination':
+          success = removeSingleBracket(removalStage, rowToRemove);
+          break;
+        case 'double':
+        case 'double elimination':
+          success = removeDoubleBracket(removalStage, rowToRemove);
+          break;
+        case 'swiss':
+        case 'swiss system':
+          success = removeSwiss(removalStage, rowToRemove);
+          break;
+        case 'random':
+        case 'preset random':
+          success = removeRandom(removalStage, rowToRemove);
+          break;
+        case 'group':
+        case 'groups':
+          success = removeGroups(removalStage, rowToRemove);
+          break;
+      }
+      if (success) {
+        var form = FormApp.openByUrl(admin[2][1].replace(/viewform$/, 'edit'));
+        var items = form.getItems();
+        var zeroMatch = form.createResponse();
+        zeroMatch.withItemResponse(items[0].asListItem().createResponse(removal[1])).withItemResponse(items[1].asTextItem().createResponse('0'));
+        zeroMatch.withItemResponse(items[2].asListItem().createResponse(removal[3])).withItemResponse(items[3].asTextItem().createResponse('0'));
+        zeroMatch.withItemResponse(items[4].asTextItem().createResponse('Removal ' + rowToRemove + ' - ' + removal[6] + ': ' + removal[1] + ' ' + removal[2] + '-' + removal[4] + ' ' + removal[3]));
+        zeroMatch.submit();
+      }
+    } else {
+      Logger.log('Removal Failure: the result is from an inactive stage');
     }
   } else {
     Logger.log('Removal Failure: the result is not in any stage');
@@ -116,11 +134,13 @@ function remakeStages() {
         case 'single':
         case 'single elimination':
           sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Bracket'));
+          if (sheet.getSheetByName(stages[i].name + ' Ranks')) {sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Ranks'));}
           createSingleBracket(i);
           break;
         case 'double':
         case 'double elimination':
           sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Bracket'));
+          if (sheet.getSheetByName(stages[i].name + ' Ranks')) {sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Ranks'));}
           createDoubleBracket(i);
           break;
         case 'swiss':
@@ -512,6 +532,7 @@ function updateSingleBracket(stage) {
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
   var nround = Math.ceil(Math.log(options[2][1])/Math.log(2));
   var gamesToWin = options[3][1];
+  var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   var found = false;
   
   for (let j=nround; j>0; j--) {
@@ -529,7 +550,7 @@ function updateSingleBracket(stage) {
         found = true;
       }
       if (found) {
-        bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues([[topwins],[bottomwins]]);
+        bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
         var loc = j + ',' + i;
         if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
           if (j != nround) {
@@ -583,7 +604,7 @@ function updateSingleBracket(stage) {
           found = true;
         }
         if (found) {
-          bracket.getRange(4 + 1.5*space, 2*j+1, 2, 1).setValues([[topwins],[bottomwins]]);
+          bracket.getRange(4 + 1.5*space, 2*j+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
           var loc = 'third';
           if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
             bracket.getRange(4 + 1.5*space, 2*j, 1, 2).setBackground('#D9EBD3');
@@ -599,7 +620,7 @@ function updateSingleBracket(stage) {
     if (found) {break;}
   }
   
-  if (found) {
+  if (found && !empty) {
     sendResultToDiscord('Bracket', bracket.getSheetId());
     var results = sheet.getSheetByName('Results');
     var resultsLength = results.getDataRange().getNumRows();
@@ -639,14 +660,14 @@ function removeSingleBracket(stage, row) {
     var toScrub = [];
     if (bracket.getRange(space + 2*space*loc[1] + ((loc[1]%2) ? 1-space : space),2*loc[0]+3).getValue() !== '') {
       Logger.log('Removal Failure (Single Elimination): The match the winner plays in has a result');
-      return;
+      return false;
     } else {
       toScrub.push(bracket.getRange(space + 2*space*loc[1] + ((loc[1]%2) ? 1-space : space),2*loc[0] + 2));
     }
     if ((loc[0] == nround-1) && (options[5][1] == 'third')) {
       if (bracket.getRange(4 + 3*space, 2*nround+1).getValue() !== '') {
         Logger.log('Removal Failure (Single Elimination): The third place match has a result');
-        return;
+        return false;
       } else {
         toScrub.push(bracket.getRange(4 + 3*space + ((loc[1]==1) ? 1 : 0), 2*loc[0] + 2));
       }
@@ -666,15 +687,16 @@ function removeSingleBracket(stage, row) {
       let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
       let nmatches = 2**(nround-loc[0]);
       let tofill = ranks.getRange(2+nmatches,2,nmatches,1).getValues();
-      for (let i=0; i<tofill.length; i++) {
+      Logger.log(tofill);
+      for (let i=0; i<nmatches; i++) {
         if ((tofill[i] == match[0][0]) || (tofill[i] == match[1][0])) {
           ranks.getRange(2+nmatches+i,2).setValue('');
-          break;
         }
       }
     }
   }
   results.getRange(row, 7, 1, 2).setValues([['','']]);
+  return true;
 }
 
 
@@ -874,6 +896,7 @@ function updateDoubleBracket(stage) {
   var nround = Math.ceil(Math.log(options[2][1])/Math.log(2));
   var nlround = 2*nround - 2 - (2**nround-options[2][1]>=2**(nround-2));
   var gamesToWin = options[3][1];
+  var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   var found = false;
   
   var ltop = 2**(nround + 1) + 2;
@@ -895,7 +918,7 @@ function updateDoubleBracket(stage) {
       }
     }
     if (found) {
-      bracket.getRange(2**nround + 2, 2*nround + 5, 2, 1).setValues([[topwins],[bottomwins]]);
+      bracket.getRange(2**nround + 2, 2*nround + 5, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
       var loc = 'f,f';
       if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
         bracket.getRange(2**nround + 2, 2*nround + 4, 1, 2).setBackground('#D9EBD3');
@@ -917,7 +940,7 @@ function updateDoubleBracket(stage) {
         found = true;
       }
       if (found) {
-        bracket.getRange(2**nround + 2, 2*nround + 3, 2, 1).setValues([[topwins],[bottomwins]]);
+        bracket.getRange(2**nround + 2, 2*nround + 3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
         var loc = 'f,b';
         if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
           bracket.getRange(2**nround + 2, 2*nround + 2, 1, 4).setBackground('#D9EBD3');
@@ -952,7 +975,7 @@ function updateDoubleBracket(stage) {
           found = true;
         }
         if (found) {
-          bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues([[topwins],[bottomwins]]);
+          bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
           var loc = 'w,' + j + ',' + i;
           if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
             if (j != nround) {
@@ -1049,7 +1072,7 @@ function updateDoubleBracket(stage) {
             found = true;
           }
           if (found) {
-            bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+7, 2, 1).setValues([[topwins],[bottomwins]]);
+            bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+7, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
             var loc = 'l,' + j + ',' + i + ',f';
             if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
               bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+6, 1, 2).setBackground('#D9EBD3');
@@ -1102,7 +1125,7 @@ function updateDoubleBracket(stage) {
               found = true;
             }
             if (found) {
-              bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+5, 2, 1).setValues([[topwins],[bottomwins]]);
+              bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+5, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
               if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
                 bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4, 1, 2).setBackground('#D9EBD3');
                 bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue(match[0][0]);
@@ -1149,7 +1172,7 @@ function updateDoubleBracket(stage) {
             found = true;
           }
           if (found) {
-            bracket.getRange(ltop + 4*i - 3, 3, 2, 1).setValues([[topwins],[bottomwins]]);
+            bracket.getRange(ltop + 4*i - 3, 3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
             var loc = 'l,f,' + i;
             if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
               bracket.getRange(ltop + 4*i - 3, 2, 1, 2).setBackground('#D9EBD3');
@@ -1200,7 +1223,7 @@ function updateDoubleBracket(stage) {
             found = true;
           }
           if (found) {
-            bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+5, 2, 1).setValues([[topwins],[bottomwins]]);
+            bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+5, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
             var loc = 'l,' + j + ',' + i + ',f';
             if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
               bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+4, 1, 2).setBackground('#D9EBD3');
@@ -1252,7 +1275,7 @@ function updateDoubleBracket(stage) {
               found = true;
             }
             if (found) {
-              bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+3, 2, 1).setValues([[topwins],[bottomwins]]);
+              bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
               var loc = 'l,' + j + ',' + i + ',b';
               if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
                 bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2, 1, 2).setBackground('#D9EBD3');
@@ -1290,7 +1313,7 @@ function updateDoubleBracket(stage) {
     }
   }
   
-  if (found) {
+  if (found && !empty) {
     sendResultToDiscord('Bracket', bracket.getSheetId());
     var results = sheet.getSheetByName('Results');
     var resultsLength = results.getDataRange().getNumRows();
@@ -1441,7 +1464,7 @@ function removeDoubleBracket(stage, row) {
       if (loc[1] == 'f') {
         if (bracket.getRange(ltop + 4*loc[2] - 3 + ((loc[2]%2) ? 2 : -1), 5).getValue() !== '') {
           Logger.log('Removal Failure (Double Elimination): The match the winner plays in has a result');
-          return;
+          return false;
         } else {
           bracket.getRange(ltop + 4*loc[2] - 3 + ((loc[2]%2) ? 2 : -1), 4).setValue('');
         }
@@ -1460,7 +1483,6 @@ function removeDoubleBracket(stage, row) {
           for (let k=0; k<tofill.length; k++) {
             if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
               ranks.getRange(2+k+2**(nround-1),2).setValue('');
-              break;
             }
           }
         }
@@ -1472,7 +1494,7 @@ function removeDoubleBracket(stage, row) {
           if (loc[1] == (nlround-3)/2) {
             if (bracket.getRange(2**nround+3, 2*nround+3).getValue() !== '') {
               Logger.log('Removal Failure (Double Elimination): The match the winner plays in has a result');
-              return;
+              return false;
             } else {
               bracket.getRange(2**nround+3, 2*nround+2).setValue('');
               bracket.getRange(ltop-1, 2).setValue('');
@@ -1480,7 +1502,7 @@ function removeDoubleBracket(stage, row) {
           } else {
             if (bracket.getRange(ltop + topShape + loc[2]*spacing + 2 + ((loc[2]%2) ? 1 - spacing/2 : spacing/2), 4*loc[1]+9).getValue() !== '') {
               Logger.log('Removal Failure (Double Elimination): The match the winner plays in has a result');
-              return;
+              return false;
             } else {
               bracket.getRange(ltop + topShape + loc[2]*spacing + 2 + ((loc[2]%2) ? 1 - spacing/2 : spacing/2), 4*loc[1]+8).setValue('');
             }
@@ -1497,17 +1519,16 @@ function removeDoubleBracket(stage, row) {
           if (options[6][1]) {
             let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
             let tofill = ranks.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
-            for (let k=0; k<tofill.length; k++) {
+            for (let k=0; k<nshapes; k++) {
               if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
                 ranks.getRange(2+k+2*nshapes,2).setValue('');
-                break;
               }
             }
           }
         } else {
           if (bracket.getRange(ltop + topShape + loc[2]*spacing + 3, 4*loc[1]+7).getValue() !== '') {
             Logger.log('Removal Failure (Double Elimination): The match the winner plays in has a result');
-            return;
+            return false;
           } else {
             bracket.getRange(ltop + topShape + loc[2]*spacing + 3, 4*loc[1]+6).setValue('');
           }
@@ -1523,10 +1544,9 @@ function removeDoubleBracket(stage, row) {
           if (options[6][1]) {
             let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
             let tofill = ranks.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
-            for (let k=0; k<tofill.length; k++) {
+            for (let k=0; k<nshapes; k++) {
               if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
                 ranks.getRange(2+k+3*nshapes,2).setValue('');
-                break;
               }
             }
           }
@@ -1540,7 +1560,7 @@ function removeDoubleBracket(stage, row) {
         if (loc[1] == (nlround/2) - 1) {
           if (bracket.getRange(2**nround+3, 2*nround+3).getValue() !== '') {
             Logger.log('Removal Failure (Double Elimination): The match the winner plays in has a result');
-            return;
+            return false;
           } else {
             bracket.getRange(2**nround+3, 2*nround+2).setValue('');
             bracket.getRange(ltop-1, 2).setValue('');
@@ -1548,7 +1568,7 @@ function removeDoubleBracket(stage, row) {
         } else {
           if (bracket.getRange(ltop + topShape + loc[2]*spacing + 1 + ((loc[2]%2) ? 1 - spacing/2 : spacing/2), 4*loc[1]+7).getValue() !== '') {
             Logger.log('Removal Failure (Double Elimination): The match the winner plays in has a result');
-            return;
+            return false;
           } else {
             bracket.getRange(ltop + topShape + loc[2]*spacing + 1 + ((loc[2]%2) ? 1 - spacing/2 : spacing/2), 4*loc[1]+6).setValue('');
           }
@@ -1565,17 +1585,16 @@ function removeDoubleBracket(stage, row) {
         if (options[6][1]) {
             let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
             let tofill = ranks.getRange(2+2*nshapes,2,nshapes,1).getValues();
-            for (let k=0; k<tofill.length; k++) {
+            for (let k=0; k<nshapes; k++) {
               if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
                 ranks.getRange(2+k+2*nshapes,2).setValue('');
-                break;
               }
             }
           }
       } else {
         if (bracket.getRange(ltop + topShape + loc[2]*spacing + 2, 4*loc[1]+5).getValue() !== '') {
           Logger.log('Removal Failure (Double Elimination): The match the winner plays in has a result');
-          return;
+          return false;
         } else {
           bracket.getRange(ltop + topShape + loc[2]*spacing + 2, 4*loc[1]+4).setValue('');
         }
@@ -1591,10 +1610,9 @@ function removeDoubleBracket(stage, row) {
         if (options[6][1]) {
             let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
             let tofill = ranks.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
-            for (let k=0; k<tofill.length; k++) {
+            for (let k=0; k<nshapes; k++) {
               if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
                 ranks.getRange(2+k+3*nshapes,2).setValue('');
-                break;
               }
             }
           }
@@ -1602,7 +1620,9 @@ function removeDoubleBracket(stage, row) {
     }
   }
   results.getRange(row, 7, 1, 2).setValues([['','']]);
+  return true;
 }
+
 
 //Swiss system functions
 
@@ -1665,7 +1685,7 @@ function createSwiss(stage) {
     players.splice(byeplace, 0, 'BYE');
   }
   var halfplayers = players.length/2;
-  switch (options[5][1].toLowerCase()) {
+  switch (options[5][1]) {
     case 'random':
       shuffle(players);
       if (byeplace) {byeplace = players.indexOf('BYE');}
@@ -1710,6 +1730,7 @@ function updateSwiss(stage) {
   
   //update matches and standings - standings updates only occur if the reported match was in the match list
   var roundMatches = swiss.getRange(2, 6, Math.ceil(options[2][1]/2),4).getValues();
+  var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   var found = false;
   for (let i=0; i < roundMatches.length; i++) {
     if ((roundMatches[i][0] == mostRecent[0]) && (roundMatches[i][3] == mostRecent[2])) {
@@ -1721,7 +1742,7 @@ function updateSwiss(stage) {
       var rightwins = Number(roundMatches[i][2]) + Number(mostRecent[1]);
       found = true;
     }    
-    if (found) {
+    if (found && !empty) {
       swiss.getRange(i+2, 7, 1, 2).setValues([[leftwins, rightwins]]);
       processing.getRange(nextOpen, 1, 2, 4).setValues([[mostRecent[0], mostRecent[2], mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], mostRecent[3], mostRecent[1]]]);
       processing.getRange('E1').setValue(nextOpen + 2);
@@ -1873,13 +1894,13 @@ function removeSwiss(stage, row) {
   
   if (loc[0] + 1 < round) {
     Logger.log('Removal Failure (Swiss): The next round has started');
-    return;
+    return false;
   } else if (loc[0] + 1 == round) {
     let roundMatches = swiss.getRange(2, 6, Math.ceil(options[2][1]/2), 4).getValues();
     for (let i = roundMatches.length - 1; i>=0; i--) {
       if ((roundMatches[i][1] !== '') && (roundMatches[i][0] != 'BYE') && (roundMatches[i][3] != 'BYE')) {
         Logger.log('Removal Failure (Swiss): The next round has started');
-        return;
+        return false;
       }
     }
     swiss.deleteColumns(6, 5);
@@ -1898,6 +1919,7 @@ function removeSwiss(stage, row) {
   }
   swiss.getRange(loc[1] + 2, 7, 1, 2).setValues(((leftwins == 0) && (rightwins == 0)) ? [['','']] : [[leftwins, rightwins]]);
   results.getRange(row, 7, 1, 2).setValues([['','']]);
+  return true;
 }
 
 
@@ -2127,6 +2149,7 @@ function updateRandom(stage) {
   var mlength = matches.length;
   var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
   var nextOpen = Number(processing.getRange('D1').getValue());
+  var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   var found = false;
   
   for (let i=0; i<mlength; i++) {
@@ -2147,7 +2170,7 @@ function updateRandom(stage) {
       }
     }
   }
-  if (found) {
+  if (found && !empty) {
     standings.getRange(cell1[0], cell1[1]+1).setValue(p1wins);
     standings.getRange(cell2[0], cell2[1]+1).setValue(p2wins);
     if (p1wins + p2wins == options[4][1]) {
@@ -2197,6 +2220,7 @@ function removeRandom(stage, row) {
     standings.getRange(loc[2], loc[3]).setFontColor('#990000');    
   }
   results.getRange(row, 7, 1, 2).setValues([['','']]);
+  return true;
 }
 
 
@@ -2238,7 +2262,7 @@ function createGroups(stage) {
   //establish groups
   var groups = [];
   var openCounter = 0;
-  switch (options[4][1].toLowerCase()) {
+  switch (options[4][1]) {
     case 'random':
       shuffle(players);
       while (players.length % ppg) {players.push('OPEN'+ ++openCounter);}
@@ -2325,9 +2349,9 @@ AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
     aggregate.setColumnWidth(3, 50);
     aggregate.setColumnWidth(4, 150);
     aggregate.setColumnWidths(5, 4, 50);
-	aggregate.getRange('H:H').setNumberFormat('0.000');
+    aggregate.getRange('H:H').setNumberFormat('0.000');
   }  
-  switch (options[5][1].toLowerCase()) {
+  switch (options[5][1]) {
     case 'wins only':
       processing.getRange('N1').setFormula('=query(G:M, "select G,M,H,I,J,K,L where not G=\'\' order by L desc")');
       var aggregate = sheet.insertSheet(stages[stage].name + ' Aggregation');      
@@ -2422,6 +2446,7 @@ function updateGroups(stage) {
   var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
   var nextOpen = Number(processing.getRange('F1').getValue());
   var groups = processing.getRange(1, 1, options[3][1]*Math.ceil(options[2][1]/options[3][1]), 3).getValues();
+  var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   
   if (mostRecent[0] == mostRecent[2]) {return false;}
   
@@ -2432,7 +2457,7 @@ function updateGroups(stage) {
       var p2Group = groups[i][2];
     }
   }
-  if (p1Group == p2Group) {
+  if ((p1Group == p2Group) && !empty) {
     processing.getRange(nextOpen, 1, 2, 5).setValues([[mostRecent[0], mostRecent[2], p1Group, mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], p1Group, mostRecent[3], mostRecent[1]]])
     processing.getRange('F1').setValue(nextOpen+2);
     sendResultToDiscord('Standings',sheet.getSheetByName(stages[stage].name + ' Standings').getSheetId());
@@ -2454,7 +2479,6 @@ function removeGroups(stage, row) {
   
   processing.getRange(removal[7], 1, 2, 5).setValues([['','','','',''],['','','','','']]);
   results.getRange(row, 7, 1, 2).setValues([['','']]);
+  return true;
 }
-
-
 
