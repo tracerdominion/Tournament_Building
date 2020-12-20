@@ -197,10 +197,10 @@ function adminSetup() {
     }  
   });
   var validation = FormApp.createTextValidation().requireNumberGreaterThanOrEqualTo(0).build();
-  form.addListItem().setTitle('Your username').setChoiceValues(names);
-  form.addTextItem().setTitle('Your wins').setValidation(validation);
-  form.addListItem().setTitle('Opponent username').setChoiceValues(names);
-  form.addTextItem().setTitle('Opponent wins').setValidation(validation);
+  form.addListItem().setTitle('Your username').setChoiceValues(names).setRequired(true);
+  form.addTextItem().setTitle('Your wins').setValidation(validation).setRequired(true);
+  form.addListItem().setTitle('Opponent username').setChoiceValues(names).setRequired(true);
+  form.addTextItem().setTitle('Opponent wins').setValidation(validation).setRequired(true);
   form.addTextItem().setTitle('Comments');
   form.setDestination(FormApp.DestinationType.SPREADSHEET, sheet.getId());
   ScriptApp.newTrigger('onFormSubmit').forForm(form).onFormSubmit().create();
