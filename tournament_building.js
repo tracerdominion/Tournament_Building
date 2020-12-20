@@ -399,7 +399,7 @@ function singleBracketOptions(stage) {
     ["Games to Win", ""],
     ["Seeding Method", "standard"],
     ["Consolation", "none"],
-    ["Ranks Sheet", ""]
+    ["Places Sheet", ""]
   ]);
 
   options.getRange(5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'random', 'tennis'],true).build());
@@ -498,29 +498,29 @@ function createSingleBracket(stage) {
   }
   placeSeeds(1,2,nround);
 
-  //ranks sheet if desired
+  //places sheet if desired
   if (options[6][1]) {
-    var ranks = sheet.insertSheet(stages[stage].name + ' Ranks');
-    ranks.deleteColumns(3,24);
-    ranks.setColumnWidth(1,40);
-    ranks.setColumnWidth(2,150);
-    ranks.getRange('A:A').setVerticalAlignment('top').setHorizontalAlignment('right');
-    ranks.getRange(1,1,3,2).setValues([
-      ['Rank', 'Player'],
+    var places = sheet.insertSheet(stages[stage].name + ' Places');
+    places.deleteColumns(3,24);
+    places.setColumnWidth(1,40);
+    places.setColumnWidth(2,150);
+    places.getRange('A:A').setVerticalAlignment('top').setHorizontalAlignment('right');
+    places.getRange(1,1,3,2).setValues([
+      ['Place', 'Player'],
       [1, ''],
       [2, '']
     ]);
     if (options[5][1] == 'none') {
-      ranks.getRange(4,1).setValue('T3');
-      ranks.getRange(4,1,2,1).merge();
+      places.getRange(4,1).setValue('T3');
+      places.getRange(4,1,2,1).merge();
     } else {
-      ranks.getRange(4,1,2,1).setValues([[3],[4]]);
+      places.getRange(4,1,2,1).setValues([[3],[4]]);
     }
     for (let n=4; n<Number(options[2][1]); n*=2) {
-      ranks.getRange(n+2,1).setValue('T' + (n+1));
-      ranks.getRange(n+2,1,n,1).merge();
+      places.getRange(n+2,1).setValue('T' + (n+1));
+      places.getRange(n+2,1,n,1).merge();
     }
-    ranks.deleteRows(Number(options[2][1]) + 2, 999-Number(options[2][1]));
+    places.deleteRows(Number(options[2][1]) + 2, 999-Number(options[2][1]));
   }
 }
 
@@ -558,17 +558,17 @@ function updateSingleBracket(stage) {
             if ((j == nround - 1) && (options[5][1] == 'third')) {
               bracket.getRange(4 + 3*space + ((i==1)?1:0), 2*j+2).setValue(match[1][0]);
             } else if (options[6][1]) {
-              let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-              let tofill = ranks.getRange(nmatches+2,2,nmatches,1).getValues().flat();
+              let places = sheet.getSheetByName(stages[stage].name + ' Places');
+              let tofill = places.getRange(nmatches+2,2,nmatches,1).getValues().flat();
               for (let k=0; k<nmatches; k++) {
                 if (!tofill[k]) {
-                  ranks.getRange(nmatches+2+k,2).setValue(match[1][0]);
+                  places.getRange(nmatches+2+k,2).setValue(match[1][0]);
                   break;
                 }
               }
             }
           } else if (options[6][1]) {
-            sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(2,2,2,1).setValues([[match[0][0]],[match[1][0]]]);
+            sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[0][0]],[match[1][0]]]);
           }
           bracket.getRange(space + 2*i*space, 2*j, 1, 2).setBackground('#D9EBD3');
         } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
@@ -577,17 +577,17 @@ function updateSingleBracket(stage) {
             if ((j == nround - 1) && (options[5][1] == 'third')) {
               bracket.getRange(4 + 3*space + ((i==1)?1:0), 2*j+2).setValue(match[0][0]);
             } else if (options[6][1]) {
-              let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-              let tofill = ranks.getRange(nmatches+2,2,nmatches,1).getValues().flat();
+              let places = sheet.getSheetByName(stages[stage].name + ' Places');
+              let tofill = places.getRange(nmatches+2,2,nmatches,1).getValues().flat();
               for (let k=0; k<nmatches; k++) {
                 if (!tofill[k]) {
-                  ranks.getRange(nmatches+2+k,2).setValue(match[0][0]);
+                  places.getRange(nmatches+2+k,2).setValue(match[0][0]);
                   break;
                 }
               }
             }
           } else if (options[6][1]) {
-            sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(2,2,2,1).setValues([[match[1][0]],[match[0][0]]]);
+            sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[1][0]],[match[0][0]]]);
           }
           bracket.getRange(space + 2*i*space+1, 2*j, 1, 2).setBackground('#D9EBD3');
         }
@@ -608,10 +608,10 @@ function updateSingleBracket(stage) {
           var loc = 'third';
           if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
             bracket.getRange(4 + 1.5*space, 2*j, 1, 2).setBackground('#D9EBD3');
-            if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(4,2,2,1).setValues([[match[0][0]],[match[1][0]]]);}
+            if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(4,2,2,1).setValues([[match[0][0]],[match[1][0]]]);}
           } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
             bracket.getRange(5 + 1.5*space, 2*j, 1, 2).setBackground('#D9EBD3');
-            if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(4,2,2,1).setValues([[match[1][0]],[match[0][0]]]);}
+            if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(4,2,2,1).setValues([[match[1][0]],[match[0][0]]]);}
           }
           break;
         }
@@ -651,7 +651,7 @@ function removeSingleBracket(stage, row) {
     }
     bracket.getRange(3 * 2**(nround-1) + 4, 2*nround+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
     if (options[6][1]) {
-      sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(4,2,2,1).setValues([[''],['']]);
+      sheet.getSheetByName(stages[stage].name + ' Places').getRange(4,2,2,1).setValues([[''],['']]);
     }
   } else {
     var space = 2**loc[0];
@@ -684,13 +684,13 @@ function removeSingleBracket(stage, row) {
     }
     bracket.getRange(space + 2*space*loc[1], 2*loc[0] + 1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
     if (options[6][1]) {
-      let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
+      let places = sheet.getSheetByName(stages[stage].name + ' Places');
       let nmatches = 2**(nround-loc[0]);
-      let tofill = ranks.getRange(2+nmatches,2,nmatches,1).getValues();
+      let tofill = places.getRange(2+nmatches,2,nmatches,1).getValues();
       Logger.log(tofill);
       for (let i=0; i<nmatches; i++) {
         if ((tofill[i] == match[0][0]) || (tofill[i] == match[1][0])) {
-          ranks.getRange(2+nmatches+i,2).setValue('');
+          places.getRange(2+nmatches+i,2).setValue('');
         }
       }
     }
@@ -712,7 +712,7 @@ function doubleBracketOptions(stage) {
     ["Games to Win", ""],
     ["Seeding Method", "standard"],
     ["Finals", "standard"],
-    ["Ranks Sheet", ""]
+    ["Places Sheet", ""]
   ]);
 
   options.getRange(5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'random', 'tennis'],true).build());
@@ -861,14 +861,14 @@ function createDoubleBracket(stage) {
     }
   }
 
-  //ranks sheet if desired
+  //places sheet if desired
   if (options[6][1]) {
-    var ranks = sheet.insertSheet(stages[stage].name + ' Ranks');
-    ranks.deleteColumns(3,24);
-    ranks.setColumnWidth(1,40);
-    ranks.setColumnWidth(2,150);
-    ranks.getRange('A:A').setVerticalAlignment('top').setHorizontalAlignment('right');
-    ranks.getRange(1,1,5,2).setValues([
+    var places = sheet.insertSheet(stages[stage].name + ' Places');
+    places.deleteColumns(3,24);
+    places.setColumnWidth(1,40);
+    places.setColumnWidth(2,150);
+    places.getRange('A:A').setVerticalAlignment('top').setHorizontalAlignment('right');
+    places.getRange(1,1,5,2).setValues([
       ['Rank', 'Player'],
       [1, ''],
       [2, ''],
@@ -876,14 +876,14 @@ function createDoubleBracket(stage) {
       [4, '']
     ]);
     for (let n=2; n<Number(options[2][1])/2; n*=2) {
-      ranks.getRange(2+2*n,1).setValue('T' + (1+2*n));
-      ranks.getRange(2+2*n,1,n,1).merge();
+      places.getRange(2+2*n,1).setValue('T' + (1+2*n));
+      places.getRange(2+2*n,1,n,1).merge();
       if (3*n < Number(options[2][1])) {
-        ranks.getRange(2+3*n,1).setValue('T' + (1+3*n));
-        ranks.getRange(2+3*n,1,n,1).merge();
+        places.getRange(2+3*n,1).setValue('T' + (1+3*n));
+        places.getRange(2+3*n,1,n,1).merge();
       }
     }
-    ranks.deleteRows(Number(options[2][1]) + 2, 999-Number(options[2][1]));
+    places.deleteRows(Number(options[2][1]) + 2, 999-Number(options[2][1]));
   }
 }
 
@@ -922,10 +922,10 @@ function updateDoubleBracket(stage) {
       var loc = 'f,f';
       if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
         bracket.getRange(2**nround + 2, 2*nround + 4, 1, 2).setBackground('#D9EBD3');
-        if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(2,2,2,1).setValues([[match[0][0]],[match[1][0]]]);}
+        if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[0][0]],[match[1][0]]]);}
       } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
         bracket.getRange(2**nround + 3, 2*nround + 4, 1, 2).setBackground('#D9EBD3');
-        if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(2,2,2,1).setValues([[match[1][0]],[match[0][0]]]);}
+        if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[1][0]],[match[0][0]]]);}
       }
     } else {
       var match = bracket.getRange(2**nround + 2, 2*nround + 2, 2, 2).getValues();
@@ -947,13 +947,13 @@ function updateDoubleBracket(stage) {
           if (options[5][1] != 'grand') {
             bracket.getRange(2**nround + 2, 2*nround + 4).setValue(match[0][0]);
           }
-          if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(2,2,2,1).setValues([[match[0][0]],[match[1][0]]]);}
+          if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[0][0]],[match[1][0]]]);}
         } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
           bracket.getRange(2**nround + 3, 2*nround + 2, 1, 2).setBackground('#D9EBD3');
           if (options[5][1] != 'grand') {
             bracket.getRange(2**nround + 2, 2*nround + 4, 2, 1).setValues([[match[0][0]], [match[1][0]]]);
           } else if (options[6][1]) {
-            sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(2,2,2,1).setValues([[match[1][0]],[match[0][0]]]);
+            sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[1][0]],[match[0][0]]]);
           }
         }
       }
@@ -1083,11 +1083,11 @@ function updateDoubleBracket(stage) {
                 bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).setValue(match[0][0]);
               }
               if (options[6][1]) {
-                let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                let tofill = ranks.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
+                let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
                 for (let k=0; k<nshapes; k++) {
                   if(!tofill[k]) {
-                    ranks.getRange(2+k+2*nshapes,2).setValue(match[1][0]);
+                    places.getRange(2+k+2*nshapes,2).setValue(match[1][0]);
                     break;
                   }
                 }
@@ -1101,11 +1101,11 @@ function updateDoubleBracket(stage) {
                 bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).setValue(match[1][0]);
               }
               if (options[6][1]) {
-                let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                let tofill = ranks.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
+                let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
                 for (let k=0; k<nshapes; k++) {
                   if(!tofill[k]) {
-                    ranks.getRange(2+k+2*nshapes,2).setValue(match[0][0]);
+                    places.getRange(2+k+2*nshapes,2).setValue(match[0][0]);
                     break;
                   }
                 }
@@ -1130,11 +1130,11 @@ function updateDoubleBracket(stage) {
                 bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4, 1, 2).setBackground('#D9EBD3');
                 bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue(match[0][0]);
                 if (options[6][1]) {
-                  let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                  let tofill = ranks.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
                   for (let k=0; k<nshapes; k++) {
                     if(!tofill[k]) {
-                      ranks.getRange(2+k+3*nshapes,2).setValue(match[1][0]);
+                      places.getRange(2+k+3*nshapes,2).setValue(match[1][0]);
                       break;
                     }
                   }
@@ -1143,11 +1143,11 @@ function updateDoubleBracket(stage) {
                 bracket.getRange(ltop + topShape + i*spacing + 5, 4*j+4, 1, 2).setBackground('#D9EBD3');
                 bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue(match[1][0]);
                 if (options[6][1]) {
-                  let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                  let tofill = ranks.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
                   for (let k=0; k<nshapes; k++) {
                     if(!tofill[k]) {
-                      ranks.getRange(2+k+3*nshapes,2).setValue(match[0][0]);
+                      places.getRange(2+k+3*nshapes,2).setValue(match[0][0]);
                       break;
                     }
                   }
@@ -1178,12 +1178,12 @@ function updateDoubleBracket(stage) {
               bracket.getRange(ltop + 4*i - 3, 2, 1, 2).setBackground('#D9EBD3');
               bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).setValue(match[0][0]);
               if (options[6][1]) {
-                let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                let tofill = ranks.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
+                let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
                 for (let k=0; k<tofill.length; k++) {
                   Logger.log(tofill);
                   if (!tofill[k]) {
-                    ranks.getRange(2+k+2**(nround-1),2).setValue(match[1][0]);
+                    places.getRange(2+k+2**(nround-1),2).setValue(match[1][0]);
                     break;
                   }
                 }
@@ -1192,11 +1192,11 @@ function updateDoubleBracket(stage) {
               bracket.getRange(ltop + 4*i - 2, 2, 1, 2).setBackground('#D9EBD3');
               bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).setValue(match[1][0]);
               if (options[6][1]) {
-                let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                let tofill = ranks.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
+                let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
                 for (let k=0; k<tofill.length; k++) {
                   if (!tofill[k]) {
-                    ranks.getRange(2+k+2**(nround-1),2).setValue(match[0][0]);
+                    places.getRange(2+k+2**(nround-1),2).setValue(match[0][0]);
                     break;
                   }
                 }
@@ -1234,11 +1234,11 @@ function updateDoubleBracket(stage) {
                 bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).setValue(match[0][0]);
               }
               if (options[6][1]) {
-                let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                let tofill = ranks.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
+                let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
                 for (let k=0; k<nshapes; k++) {
                   if(!tofill[k]) {
-                    ranks.getRange(2+k+2*nshapes,2).setValue(match[1][0]);
+                    places.getRange(2+k+2*nshapes,2).setValue(match[1][0]);
                     break;
                   }
                 }
@@ -1252,11 +1252,11 @@ function updateDoubleBracket(stage) {
                 bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).setValue(match[1][0]);
               }
               if (options[6][1]) {
-                let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                let tofill = ranks.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
+                let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
                 for (let k=0; k<nshapes; k++) {
                   if(!tofill[k]) {
-                    ranks.getRange(2+k+2*nshapes,2).setValue(match[0][0]);
+                    places.getRange(2+k+2*nshapes,2).setValue(match[0][0]);
                     break;
                   }
                 }
@@ -1281,11 +1281,11 @@ function updateDoubleBracket(stage) {
                 bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2, 1, 2).setBackground('#D9EBD3');
                 bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setValue(match[0][0]);
                 if (options[6][1]) {
-                  let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                  let tofill = ranks.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
                   for (let k=0; k<nshapes; k++) {
                     if(!tofill[k]) {
-                      ranks.getRange(2+k+3*nshapes,2).setValue(match[1][0]);
+                      places.getRange(2+k+3*nshapes,2).setValue(match[1][0]);
                       break;
                     }
                   }
@@ -1294,11 +1294,11 @@ function updateDoubleBracket(stage) {
                 bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+2, 1, 2).setBackground('#D9EBD3');
                 bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setValue(match[1][0]);
                 if (options[6][1]) {
-                  let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-                  let tofill = ranks.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
                   for (let k=0; k<nshapes; k++) {
                     if(!tofill[k]) {
-                      ranks.getRange(2+k+3*nshapes,2).setValue(match[0][0]);
+                      places.getRange(2+k+3*nshapes,2).setValue(match[0][0]);
                       break;
                     }
                   }
@@ -1364,7 +1364,7 @@ function removeDoubleBracket(stage, row) {
         bracket.getRange(2**nround+2, 2*nround+3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
       }
     }
-    if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Ranks').getRange(2,2,2,1).setValues([[''],['']]);}
+    if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[''],['']]);}
   } else if (loc[0] == 'w') {
     //in winners' bracket
     var space = 2**loc[1];
@@ -1478,11 +1478,11 @@ function removeDoubleBracket(stage, row) {
         }
         bracket.getRange(ltop + 4*loc[2] - 3, 3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
         if (options[6][1]) {
-          let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-          let tofill = ranks.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
+          let places = sheet.getSheetByName(stages[stage].name + ' Places');
+          let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
           for (let k=0; k<tofill.length; k++) {
             if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
-              ranks.getRange(2+k+2**(nround-1),2).setValue('');
+              places.getRange(2+k+2**(nround-1),2).setValue('');
             }
           }
         }
@@ -1517,11 +1517,11 @@ function removeDoubleBracket(stage, row) {
           }
           bracket.getRange(ltop + topShape + loc[2]*spacing + 2, 4*loc[1]+7, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
           if (options[6][1]) {
-            let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-            let tofill = ranks.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
+            let places = sheet.getSheetByName(stages[stage].name + ' Places');
+            let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
             for (let k=0; k<nshapes; k++) {
               if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
-                ranks.getRange(2+k+2*nshapes,2).setValue('');
+                places.getRange(2+k+2*nshapes,2).setValue('');
               }
             }
           }
@@ -1542,11 +1542,11 @@ function removeDoubleBracket(stage, row) {
           }
           bracket.getRange(ltop + topShape + loc[2]*spacing + 4, 4*loc[1]+5, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
           if (options[6][1]) {
-            let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-            let tofill = ranks.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+            let places = sheet.getSheetByName(stages[stage].name + ' Places');
+            let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
             for (let k=0; k<nshapes; k++) {
               if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
-                ranks.getRange(2+k+3*nshapes,2).setValue('');
+                places.getRange(2+k+3*nshapes,2).setValue('');
               }
             }
           }
@@ -1583,11 +1583,11 @@ function removeDoubleBracket(stage, row) {
         }
         bracket.getRange(ltop + topShape + loc[2]*spacing + 1, 4*loc[1]+5, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
         if (options[6][1]) {
-            let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-            let tofill = ranks.getRange(2+2*nshapes,2,nshapes,1).getValues();
+            let places = sheet.getSheetByName(stages[stage].name + ' Places');
+            let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues();
             for (let k=0; k<nshapes; k++) {
               if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
-                ranks.getRange(2+k+2*nshapes,2).setValue('');
+                places.getRange(2+k+2*nshapes,2).setValue('');
               }
             }
           }
@@ -1608,11 +1608,11 @@ function removeDoubleBracket(stage, row) {
         }
         bracket.getRange(ltop + topShape + loc[2]*spacing + 3, 4*loc[1]+3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
         if (options[6][1]) {
-            let ranks = sheet.getSheetByName(stages[stage].name + ' Ranks');
-            let tofill = ranks.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+            let places = sheet.getSheetByName(stages[stage].name + ' Places');
+            let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
             for (let k=0; k<nshapes; k++) {
               if ((tofill[k] == match[0][0]) || (tofill[k] == match[1][0])) {
-                ranks.getRange(2+k+3*nshapes,2).setValue('');
+                places.getRange(2+k+3*nshapes,2).setValue('');
               }
             }
           }
