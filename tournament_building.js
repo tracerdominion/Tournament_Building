@@ -312,6 +312,9 @@ function onFormSubmit() {
   
   if (!found) {
     sendResultToDiscord('unfound', 0);
+    var results = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Results');
+    var resultsLength = results.getDataRange().getNumRows();
+    results.getRange(resultsLength, 8).setValue('not found');
   }
 }
 
@@ -697,7 +700,6 @@ function removeSingleBracket(stage, row) {
       let places = sheet.getSheetByName(stages[stage].name + ' Places');
       let nmatches = 2**(nround-loc[0]);
       let tofill = places.getRange(2+nmatches,2,nmatches,1).getValues();
-      Logger.log(tofill);
       for (let i=0; i<nmatches; i++) {
         if ((tofill[i] == match[0][0]) || (tofill[i] == match[1][0])) {
           places.getRange(2+nmatches+i,2).setValue('');
@@ -705,7 +707,7 @@ function removeSingleBracket(stage, row) {
       }
     }
   }
-  results.getRange(row, 7, 1, 2).setValues([['','']]);
+  results.getRange(row, 7, 1, 2).setValues([['','removed']]).setFontColor(null);
   return true;
 }
 
@@ -1629,7 +1631,7 @@ function removeDoubleBracket(stage, row) {
       }
     }
   }
-  results.getRange(row, 7, 1, 2).setValues([['','']]);
+  results.getRange(row, 7, 1, 2).setValues([['','removed']]).setFontColor(null);
   return true;
 }
 
@@ -1928,7 +1930,7 @@ function removeSwiss(stage, row) {
     var rightwins = match[2] - removal[2];
   }
   swiss.getRange(loc[1] + 2, 7, 1, 2).setValues(((leftwins == 0) && (rightwins == 0)) ? [['','']] : [[leftwins, rightwins]]);
-  results.getRange(row, 7, 1, 2).setValues([['','']]);
+  results.getRange(row, 7, 1, 2).setValues([['','removed']]).setFontColor(null);
   return true;
 }
 
@@ -2219,17 +2221,7 @@ function removeRandom(stage, row) {
   var p2wins = Number(standings.getRange(loc[2],loc[3]+1).getValue()) - Number(removal[4]);
   standings.getRange(loc[2],loc[3]+1).setValue(p2wins ? p2wins : '');
   processing.getRange(loc[4], 1, 2, 3).setValues([['','',''], ['','','']]);
-  if (p1wins + p2wins == options[4][1]) {
-    standings.getRange(loc[0], loc[1]).setFontColor('#38761d');
-    standings.getRange(loc[2], loc[3]).setFontColor('#38761d');
-  } else if ((p1wins + p2wins > options[4][1])) {
-    standings.getRange(loc[0], loc[1]).setFontColor('#ff0000');
-    standings.getRange(loc[2], loc[3]).setFontColor('#ff0000');
-  } else {
-    standings.getRange(loc[0], loc[1]).setFontColor('#990000');
-    standings.getRange(loc[2], loc[3]).setFontColor('#990000');    
-  }
-  results.getRange(row, 7, 1, 2).setValues([['','']]);
+  results.getRange(row, 7, 1, 2).setValues([['','removed']]).setFontColor(null);
   return true;
 }
 
@@ -2488,7 +2480,7 @@ function removeGroups(stage, row) {
   var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
   
   processing.getRange(removal[7], 1, 2, 5).setValues([['','','','',''],['','','','','']]);
-  results.getRange(row, 7, 1, 2).setValues([['','']]);
+  results.getRange(row, 7, 1, 2).setValues([['','removed']]).setFontColor(null);
   return true;
 }
 
