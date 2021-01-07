@@ -99,29 +99,34 @@ function testWebhook() {
   var admin = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Administration').getDataRange().getValues();
   var webhook = admin[3][1];
 
-  var possibles = ["[Hi! I'm your talking webhook. Do you have a result?](https://www.youtube.com/watch?v=9-QWW2Cxn98)",
-                   "[Ever wonder how your results are processed?](https://www.youtube.com/watch?v=OZT9IvH5mC8)"];
+  if (webhook) {
+    var possibles = ["[Hi! I'm your talking webhook. Do you have a result?](https://www.youtube.com/watch?v=9-QWW2Cxn98)",
+                    "[Ever wonder how your results are processed?](https://www.youtube.com/watch?v=OZT9IvH5mC8)"];
+    
+    var content = possibles[Math.floor(Math.random() * possibles.length)] + "\n\nThis webhook will display " + admin[0][1] + " results as they come in.";
+    
+    var testMessage = {
+      "method": "post",
+      "headers": {
+        "Content-Type": "application/json",
+      },
+      "payload": JSON.stringify({
+        "content": null,
+        "embeds": [
+          {
+            "title": "Test and Introduction",
+            "color": parseInt('0x'.concat(admin[3][3].slice(1))),
+            "description": content
+          }
+        ]
+      })
+    };
+    
+    UrlFetchApp.fetch(webhook, testMessage);
+  } else {
+    Logger.log("No webhook URL provided")
+  }
   
-  var content = possibles[Math.floor(Math.random() * possibles.length)] + "\n\nThis webhook will display " + admin[0][1] + " results as they come in.";
-  
-  var testMessage = {
-    "method": "post",
-    "headers": {
-      "Content-Type": "application/json",
-    },
-    "payload": JSON.stringify({
-      "content": null,
-      "embeds": [
-        {
-          "title": "Test and Introduction",
-          "color": parseInt('0x'.concat(admin[3][3].slice(1))),
-          "description": content
-        }
-      ]
-    })
-  };
-   
-  UrlFetchApp.fetch(webhook, testMessage);
 }
 
 function remakeStages() {
@@ -314,28 +319,33 @@ function sendResultToDiscord(displayType, gid) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var admin = sheet.getSheetByName('Administration').getDataRange().getValues();
   var webhook = admin[3][1];
+
   var form = FormApp.openByUrl(admin[2][1]).getResponses();
   var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse()});
   
   var display = '**' + mostRecent[0] + ' ' + mostRecent[1] + '-' + mostRecent[3] + ' ' + mostRecent[2] + '**';
   if (displayType == 'unfound') {
-    display += '\nThis results submission did not match any active matches. If it should have, the tournament organizer should make sure that active stages are properly checked as having started and that there are no spreadsheet errors.';   
-    var unfoundEmbed = {
-      "method": "post",
-      "headers": {
-        "Content-Type": "application/json",
-      },
-      "payload": JSON.stringify({
-        "content": null,
-        "embeds": [{
-          "title": "Invalid Result Submitted",
-          "color": parseInt('0x'.concat(admin[3][3].slice(1))),
-          "description": display
-        }]
-      })
-    };
-    UrlFetchApp.fetch(webhook, unfoundEmbed);
-  } else {
+    display += '\nThis results submission did not match any active matches. If it should have, the tournament organizer should make sure that active stages are properly checked as having started and that there are no spreadsheet errors.';
+    if (webhook) { 
+      var unfoundEmbed = {
+        "method": "post",
+        "headers": {
+          "Content-Type": "application/json",
+        },
+        "payload": JSON.stringify({
+          "content": null,
+          "embeds": [{
+            "title": "Invalid Result Submitted",
+            "color": parseInt('0x'.concat(admin[3][3].slice(1))),
+            "description": display
+          }]
+        })
+      };
+      UrlFetchApp.fetch(webhook, unfoundEmbed);
+    } else {
+      Logger.log(display.replace('\n', ': '));
+    }
+  } else if (webhook) {
     if (mostRecent[4]) {
       display += '\n' + mostRecent[4];
     }
