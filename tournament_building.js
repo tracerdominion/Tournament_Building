@@ -552,61 +552,8 @@ function updateSingleBracket(stage) {
     let nmatches = 2**(nround-j);
     let space = 2**j;
     for (let i=0; i<nmatches; i++) {
-      let match = bracket.getRange(space + 2*i*space, 2*j, 2, 2).getValues();
-      if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
-        var topwins = Number(match[0][1]) + Number(mostRecent[1]);
-        var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
-        found = true;
-      } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
-        var topwins = Number(match[0][1]) + Number(mostRecent[3]);
-        var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
-        found = true;
-      }
-      if (found) {
-        bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-        var loc = j + ',' + i;
-        if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-          if (j != nround) {
-            bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[0][0]);
-            if ((j == nround - 1) && (options[5][1] == 'third')) {
-              bracket.getRange(4 + 3*space + ((i==1)?1:0), 2*j+2).setValue(match[1][0]);
-            } else if (options[6][1]) {
-              let places = sheet.getSheetByName(stages[stage].name + ' Places');
-              let tofill = places.getRange(nmatches+2,2,nmatches,1).getValues().flat();
-              for (let k=0; k<nmatches; k++) {
-                if (!tofill[k]) {
-                  places.getRange(nmatches+2+k,2).setValue(match[1][0]);
-                  break;
-                }
-              }
-            }
-          } else if (options[6][1]) {
-            sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[0][0]],[match[1][0]]]);
-          }
-          bracket.getRange(space + 2*i*space, 2*j, 1, 2).setBackground('#D9EBD3');
-        } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-          if (j != nround) {
-            bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[1][0]);
-            if ((j == nround - 1) && (options[5][1] == 'third')) {
-              bracket.getRange(4 + 3*space + ((i==1)?1:0), 2*j+2).setValue(match[0][0]);
-            } else if (options[6][1]) {
-              let places = sheet.getSheetByName(stages[stage].name + ' Places');
-              let tofill = places.getRange(nmatches+2,2,nmatches,1).getValues().flat();
-              for (let k=0; k<nmatches; k++) {
-                if (!tofill[k]) {
-                  places.getRange(nmatches+2+k,2).setValue(match[0][0]);
-                  break;
-                }
-              }
-            }
-          } else if (options[6][1]) {
-            sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[1][0]],[match[0][0]]]);
-          }
-          bracket.getRange(space + 2*i*space+1, 2*j, 1, 2).setBackground('#D9EBD3');
-        }
-        break;
-      } else if ((j == nround) && (options[5][1] == 'third')) {
-        match = bracket.getRange(4 + 1.5*space, 2*j, 2, 2).getValues();
+      if (!bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).getValue()) {
+        let match = bracket.getRange(space + 2*i*space, 2*j, 2, 2).getValues();
         if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
           var topwins = Number(match[0][1]) + Number(mostRecent[1]);
           var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
@@ -617,16 +564,71 @@ function updateSingleBracket(stage) {
           found = true;
         }
         if (found) {
-          bracket.getRange(4 + 1.5*space, 2*j+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-          var loc = 'third';
+          bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
+          var loc = j + ',' + i;
           if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-            bracket.getRange(4 + 1.5*space, 2*j, 1, 2).setBackground('#D9EBD3');
-            if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(4,2,2,1).setValues([[match[0][0]],[match[1][0]]]);}
+            if (j != nround) {
+              bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[0][0]);
+              if ((j == nround - 1) && (options[5][1] == 'third')) {
+                bracket.getRange(4 + 3*space + ((i==1)?1:0), 2*j+2).setValue(match[1][0]);
+              } else if (options[6][1]) {
+                let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                let tofill = places.getRange(nmatches+2,2,nmatches,1).getValues().flat();
+                for (let k=0; k<nmatches; k++) {
+                  if (!tofill[k]) {
+                    places.getRange(nmatches+2+k,2).setValue(match[1][0]);
+                    break;
+                  }
+                }
+              }
+            } else if (options[6][1]) {
+              sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[0][0]],[match[1][0]]]);
+            }
+            bracket.getRange(space + 2*i*space, 2*j, 1, 2).setBackground('#D9EBD3');
           } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-            bracket.getRange(5 + 1.5*space, 2*j, 1, 2).setBackground('#D9EBD3');
-            if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(4,2,2,1).setValues([[match[1][0]],[match[0][0]]]);}
+            if (j != nround) {
+              bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[1][0]);
+              if ((j == nround - 1) && (options[5][1] == 'third')) {
+                bracket.getRange(4 + 3*space + ((i==1)?1:0), 2*j+2).setValue(match[0][0]);
+              } else if (options[6][1]) {
+                let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                let tofill = places.getRange(nmatches+2,2,nmatches,1).getValues().flat();
+                for (let k=0; k<nmatches; k++) {
+                  if (!tofill[k]) {
+                    places.getRange(nmatches+2+k,2).setValue(match[0][0]);
+                    break;
+                  }
+                }
+              }
+            } else if (options[6][1]) {
+              sheet.getSheetByName(stages[stage].name + ' Places').getRange(2,2,2,1).setValues([[match[1][0]],[match[0][0]]]);
+            }
+            bracket.getRange(space + 2*i*space+1, 2*j, 1, 2).setBackground('#D9EBD3');
           }
           break;
+        } else if ((j == nround) && (options[5][1] == 'third')) {
+          match = bracket.getRange(4 + 1.5*space, 2*j, 2, 2).getValues();
+          if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
+            var topwins = Number(match[0][1]) + Number(mostRecent[1]);
+            var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
+            found = true;
+          } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
+            var topwins = Number(match[0][1]) + Number(mostRecent[3]);
+            var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
+            found = true;
+          }
+          if (found) {
+            bracket.getRange(4 + 1.5*space, 2*j+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
+            var loc = 'third';
+            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
+              bracket.getRange(4 + 1.5*space, 2*j, 1, 2).setBackground('#D9EBD3');
+              if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(4,2,2,1).setValues([[match[0][0]],[match[1][0]]]);}
+            } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
+              bracket.getRange(5 + 1.5*space, 2*j, 1, 2).setBackground('#D9EBD3');
+              if (options[6][1]) {sheet.getSheetByName(stages[stage].name + ' Places').getRange(4,2,2,1).setValues([[match[1][0]],[match[0][0]]]);}
+            }
+            break;
+          }
         }
       }
     }
