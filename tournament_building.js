@@ -139,13 +139,13 @@ function remakeStages() {
         case 'single':
         case 'single elimination':
           sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Bracket'));
-          if (sheet.getSheetByName(stages[i].name + ' Ranks')) {sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Ranks'));}
+          if (sheet.getSheetByName(stages[i].name + ' Places')) {sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Places'));}
           createSingleBracket(i);
           break;
         case 'double':
         case 'double elimination':
           sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Bracket'));
-          if (sheet.getSheetByName(stages[i].name + ' Ranks')) {sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Ranks'));}
+          if (sheet.getSheetByName(stages[i].name + ' Places')) {sheet.deleteSheet(sheet.getSheetByName(stages[i].name + ' Places'));}
           createDoubleBracket(i);
           break;
         case 'swiss':
@@ -312,8 +312,9 @@ function onFormSubmit() {
   
   if (!found) {
     sendResultToDiscord('unfound', 0);
+    Utilities.sleep(2000);
     var results = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Results');
-    var resultsLength = results.getDataRange().getNumRows();
+    var resultsLength = results.getDataRange().getNumRows();    
     results.getRange(resultsLength, 8).setValue('not found');
   }
 }
@@ -402,141 +403,6 @@ function columnFinder(n) {
 
 //Single Elimination functions
 
-function singleBracketOptions(stage) {
-  var options = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Options');
-
-  options.getRange(1,1,7,2).setValues([
-    ["''" + stages[stage].name + "' Single Elimination Options", ""],
-    ["Seeding Sheet", ""],
-    ["Number of Players", ""],
-    ["Games to Win", ""],
-    ["Seeding Method", "standard"],
-    ["Consolation", "none"],
-    ["Places Sheet", ""]
-  ]);
-
-  options.getRange(5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'random', 'tennis'],true).build());
-  options.getRange(6,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['none', 'third'],true).build());
-  options.getRange(7,2).insertCheckboxes();
-}
-
-function createSingleBracket(stage) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet();
-  var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
-  var nround = Math.ceil(Math.log(options[2][1])/Math.log(2));
-  var bracket = sheet.insertSheet(stages[stage].name + ' Bracket');
-  bracket.deleteRows(2, 999);
-  if (options[5][1] == 'third') {
-    if (nround > 3) {
-      bracket.insertRows(1, 2**(nround+1) - 1);
-    } else {
-      bracket.insertRows(1, 2**nround + 2**(nround-1) + 5);
-    }
-  } else {
-    bracket.insertRows(1, 2**(nround+1) - 1);
-  }  
-  bracket.deleteColumns(2, 25);
-  bracket.insertColumns(1, 2*nround + 1);
-  
-  //make borders
-  for (let j=1; j <= nround; j++) {
-    let nmatches = 2**(nround-j);
-    let space = 2**j;
-    for (let i=0; i < nmatches; i++) {
-      bracket.getRange(space + 2*i*space, 2*j, 2, 2).setBorder(true, true, true, true, null, null, null, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
-      if (j != 1) {
-        bracket.getRange(space/2 + 2*i*space, 2*j, space, 1).setBorder(null, true, null, null, null, null, null, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
-      }
-    }
-  }
-  if (options[5][1] == 'third') {
-    let top = 2**nround + 2**(nround-1) + 4
-    bracket.getRange(top, 2*nround, 2, 2).setBorder(true, true, true, true, null, null, null, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
-    bracket.getRange(top-1, 2*nround).setFontColor('#b7b7b7').setValue('Third Place Match');
-  }
-  
-  //column widths
-  bracket.setColumnWidth(1, 50)
-  for (let j=2; j <= 2*nround + 1; j++) {
-    if (j % 2) {
-      bracket.setColumnWidth(j, 30);
-    } else {
-      bracket.setColumnWidth(j, 150);
-    }
-  }
-  
-  //seed numbers and players
-  var seedList = Array.from({length: options[2][1]}, (v, i) => (i+1));
-  var seedMethod = options[4][1];
-  switch (seedMethod) {
-    case 'random':
-      shuffle(seedList);
-      break;
-    case 'tennis':
-      let lastWithBye = 2**nround - options[2][1];
-      let splitRound = lastWithBye ? Math.ceil(Math.log(lastWithBye)/Math.log(2)) : -1;
-      shuffle(seedList, 2**(nround-1));      
-      for (let i=nround-1; i>1; i--) {
-        if (i == splitRound) {
-          shuffle(seedList, 2**(i-1), lastWithBye - 1);
-          shuffle(seedList, lastWithBye, 2**i - 1);
-        } else {
-          shuffle(seedList, 2**(i-1), 2**i - 1);
-        }
-      }
-      break;
-  }
-  
-  function placeSeeds(seed, location, roundsLeft) {    
-    if (2**nround + 1 - seed <= Number(options[2][1])) {
-      if (seedMethod != 'random') {bracket.getRange(location, 1).setValue(seedList[seed-1]);}
-      bracket.getRange(location, 2).setFormula("=index('" + options[1][1] + "'!B:B," + (seedList[seed-1] + 1) + ")");
-      if (seedMethod != 'random') {bracket.getRange(location + 1, 1).setValue(seedList[2**nround - seed]);}
-      bracket.getRange(location + 1, 2).setFormula("=index('" + options[1][1] + "'!B:B," + (seedList[2**nround - seed] + 1) + ")");
-    } else {
-      bracket.getRange(location, 2, 2, 2).setBorder(false, false, false, false, null, null);
-      if ((location - 2) % 8) {
-        if (seedMethod != 'random') {bracket.getRange(location - 1, 3).setValue(seedList[seed-1]);}
-        bracket.getRange(location - 1, 4).setFormula("=index('" + options[1][1] + "'!B:B," + (seedList[seed-1] + 1) + ")");        
-      } else {
-        if (seedMethod != 'random') {bracket.getRange(location + 2, 3).setValue(seedList[seed-1]);}
-        bracket.getRange(location + 2, 4).setFormula("=index('" + options[1][1] + "'!B:B," + (seedList[seed-1] + 1) + ")");        
-      }      
-    }
-    
-    for(let i=nround-roundsLeft+1; i < nround; i++) {
-      placeSeeds(2**i + 1 - seed, location + 2**(nround+1-i) , nround - i);
-    }
-    
-  }
-  placeSeeds(1,2,nround);
-
-  //places sheet if desired
-  if (options[6][1]) {
-    var places = sheet.insertSheet(stages[stage].name + ' Places');
-    places.deleteColumns(3,24);
-    places.setColumnWidth(1,40);
-    places.setColumnWidth(2,150);
-    places.getRange('A:A').setVerticalAlignment('top').setHorizontalAlignment('right');
-    places.getRange(1,1,3,2).setValues([
-      ['Place', 'Player'],
-      [1, ''],
-      [2, '']
-    ]);
-    if (options[5][1] == 'none') {
-      places.getRange(4,1).setValue('T3');
-      places.getRange(4,1,2,1).merge();
-    } else {
-      places.getRange(4,1,2,1).setValues([[3],[4]]);
-    }
-    for (let n=4; n<Number(options[2][1]); n*=2) {
-      places.getRange(n+2,1).setValue('T' + (n+1));
-      places.getRange(n+2,1,n,1).merge();
-    }
-    places.deleteRows(Number(options[2][1]) + 2, 999-Number(options[2][1]));
-  }
-}
-
 function updateSingleBracket(stage) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var form = FormApp.openByUrl(sheet.getSheetByName('Administration').getDataRange().getValues()[2][1]).getResponses();
@@ -552,7 +418,7 @@ function updateSingleBracket(stage) {
     let nmatches = 2**(nround-j);
     let space = 2**j;
     for (let i=0; i<nmatches; i++) {
-      if (!bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).getValue()) {
+      if (bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).getValue() === '') {
         let match = bracket.getRange(space + 2*i*space, 2*j, 2, 2).getValues();
         if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
           var topwins = Number(match[0][1]) + Number(mostRecent[1]);
@@ -978,91 +844,93 @@ function updateDoubleBracket(stage) {
       let nmatches = 2**(nround-j);
       let space = 2**j;
       for (let i=0; i<nmatches; i++) {
-        let match = bracket.getRange(space + 2*i*space, 2*j, 2, 2).getValues();
-        if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
-          var topwins = Number(match[0][1]) + Number(mostRecent[1]);
-          var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
-          found = true;
-        } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
-          var topwins = Number(match[0][1]) + Number(mostRecent[3]);
-          var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
-          found = true;
-        }
-        if (found) {
-          bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-          var loc = 'w,' + j + ',' + i;
-          if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-            if (j != nround) {
-              bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[0][0]);
-            } else {
-              bracket.getRange(space + 2*i*space + 2, 2*j+2).setValue(match[0][0]);
-            }
-            bracket.getRange(space + 2*i*space, 2*j, 1, 2).setBackground('#D9EBD3');
-            bracket.getRange(ltop - 1, 1).setValue(loserInfo[0] + '~' + match[1][0] + '~');
-            if (nlround % 2) {
-              if (j>2) {
-                bracket.getRange(ltop + 4 * (2**(j-3) - 1) - 2*j + 7 + ((j%2) ? i : -1-i+nmatches)*8*2**(j-3), 4*j-6).setValue(match[1][0]);
-              } else if (j == 2) {
-                if (bracket.getRange(ltop + 4*(nmatches - i) - 3,1).getValue()) {
-                  bracket.getRange(ltop + 4*(nmatches - i) - 3,2).setValue(match[1][0]);
-                } else {
-                  bracket.getRange(ltop + 4*(nmatches - i) - 3 + ((i%2) ? 2 : -1), 4).setValue(match[1][0]);
-                }
-              } else {
-                bracket.getRange(ltop + 2*i, 2).setValue(match[1][0]);
-              }
-            } else {
-              if (j>1) {
-                bracket.getRange(ltop + 3 * (2**(j-2) - 1) - 2*j + 5 + ((j%2) ? i : -1-i+2**(nround-j))*6*2**(j-2), 4*j-4).setValue(match[1][0]);
-              } else {
-                if (i%2) {
-                  if (bracket.getRange(ltop + 1 + 3*i, 1).getValue()) {
-                    bracket.getRange(ltop + 1 + 3*i, 2).setValue(match[1][0]);
-                  } else {
-                    bracket.getRange(ltop - 1 + 3*i, 4).setValue(match[1][0]);
-                  }
-                } else {
-                  bracket.getRange(ltop + 3 + 3*i, 2).setValue(match[1][0]);
-                }
-              }
-            }
-          } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-            if (j != nround) {
-              bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[1][0]);
-            } else {
-              bracket.getRange(space + 2*i*space + 2, 2*j+2).setValue(match[1][0]);
-            }
-            bracket.getRange(space + 2*i*space+1, 2*j, 1, 2).setBackground('#D9EBD3');
-            bracket.getRange(ltop - 1, 1).setValue(loserInfo[0] + '~' + match[0][0] + '~');
-            if (nlround % 2) {
-              if (j>2) {
-                bracket.getRange(ltop + 4 * (2**(j-3) - 1) - 2*j + 7 + ((j%2) ? i : -1-i+2**(nround-j))*8*2**(j-3), 4*j-6).setValue(match[0][0]);
-              } else if (j == 2) {
-                if (bracket.getRange(ltop + 4*(nmatches - i) - 3,1).getValue()) {
-                  bracket.getRange(ltop + 4*(nmatches - i) - 3,2).setValue(match[0][0]);
-                } else {
-                  bracket.getRange(ltop + 4*(nmatches - i) - 3 + ((i%2) ? 2 : -1), 4).setValue(match[0][0]);
-                }
-              } else {
-                bracket.getRange(ltop + 2*i, 2).setValue(match[0][0]);
-              }
-            } else {
-              if (j>1) {
-                bracket.getRange(ltop + 3 * (2**(j-2) - 1) - 2*j + 5 + ((j%2) ? i : -1-i+2**(nround-j))*6*2**(j-2), 4*j-4).setValue(match[0][0]);
-              } else {
-                if (i%2) {
-                  if (bracket.getRange(ltop + 1 + 3*i, 1).getValue()) {
-                    bracket.getRange(ltop + 1 + 3*i, 2).setValue(match[0][0]);
-                  } else {
-                    bracket.getRange(ltop - 1 + 3*i, 4).setValue(match[0][0]);
-                  }
-                } else {
-                  bracket.getRange(ltop + 3 + 3*i, 2).setValue(match[0][0]);
-                }
-              }
-            }
+        if (bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).getValue() === '') {
+          let match = bracket.getRange(space + 2*i*space, 2*j, 2, 2).getValues();
+          if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
+            var topwins = Number(match[0][1]) + Number(mostRecent[1]);
+            var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
+            found = true;
+          } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
+            var topwins = Number(match[0][1]) + Number(mostRecent[3]);
+            var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
+            found = true;
           }
-          break;
+          if (found) {
+            bracket.getRange(space + 2*i*space, 2*j+1, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
+            var loc = 'w,' + j + ',' + i;
+            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
+              if (j != nround) {
+                bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[0][0]);
+              } else {
+                bracket.getRange(space + 2*i*space + 2, 2*j+2).setValue(match[0][0]);
+              }
+              bracket.getRange(space + 2*i*space, 2*j, 1, 2).setBackground('#D9EBD3');
+              bracket.getRange(ltop - 1, 1).setValue(loserInfo[0] + '~' + match[1][0] + '~');
+              if (nlround % 2) {
+                if (j>2) {
+                  bracket.getRange(ltop + 4 * (2**(j-3) - 1) - 2*j + 7 + ((j%2) ? i : -1-i+nmatches)*8*2**(j-3), 4*j-6).setValue(match[1][0]);
+                } else if (j == 2) {
+                  if (bracket.getRange(ltop + 4*(nmatches - i) - 3,1).getValue()) {
+                    bracket.getRange(ltop + 4*(nmatches - i) - 3,2).setValue(match[1][0]);
+                  } else {
+                    bracket.getRange(ltop + 4*(nmatches - i) - 3 + ((i%2) ? 2 : -1), 4).setValue(match[1][0]);
+                  }
+                } else {
+                  bracket.getRange(ltop + 2*i, 2).setValue(match[1][0]);
+                }
+              } else {
+                if (j>1) {
+                  bracket.getRange(ltop + 3 * (2**(j-2) - 1) - 2*j + 5 + ((j%2) ? i : -1-i+2**(nround-j))*6*2**(j-2), 4*j-4).setValue(match[1][0]);
+                } else {
+                  if (i%2) {
+                    if (bracket.getRange(ltop + 1 + 3*i, 1).getValue()) {
+                      bracket.getRange(ltop + 1 + 3*i, 2).setValue(match[1][0]);
+                    } else {
+                      bracket.getRange(ltop - 1 + 3*i, 4).setValue(match[1][0]);
+                    }
+                  } else {
+                    bracket.getRange(ltop + 3 + 3*i, 2).setValue(match[1][0]);
+                  }
+                }
+              }
+            } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
+              if (j != nround) {
+                bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[1][0]);
+              } else {
+                bracket.getRange(space + 2*i*space + 2, 2*j+2).setValue(match[1][0]);
+              }
+              bracket.getRange(space + 2*i*space+1, 2*j, 1, 2).setBackground('#D9EBD3');
+              bracket.getRange(ltop - 1, 1).setValue(loserInfo[0] + '~' + match[0][0] + '~');
+              if (nlround % 2) {
+                if (j>2) {
+                  bracket.getRange(ltop + 4 * (2**(j-3) - 1) - 2*j + 7 + ((j%2) ? i : -1-i+2**(nround-j))*8*2**(j-3), 4*j-6).setValue(match[0][0]);
+                } else if (j == 2) {
+                  if (bracket.getRange(ltop + 4*(nmatches - i) - 3,1).getValue()) {
+                    bracket.getRange(ltop + 4*(nmatches - i) - 3,2).setValue(match[0][0]);
+                  } else {
+                    bracket.getRange(ltop + 4*(nmatches - i) - 3 + ((i%2) ? 2 : -1), 4).setValue(match[0][0]);
+                  }
+                } else {
+                  bracket.getRange(ltop + 2*i, 2).setValue(match[0][0]);
+                }
+              } else {
+                if (j>1) {
+                  bracket.getRange(ltop + 3 * (2**(j-2) - 1) - 2*j + 5 + ((j%2) ? i : -1-i+2**(nround-j))*6*2**(j-2), 4*j-4).setValue(match[0][0]);
+                } else {
+                  if (i%2) {
+                    if (bracket.getRange(ltop + 1 + 3*i, 1).getValue()) {
+                      bracket.getRange(ltop + 1 + 3*i, 2).setValue(match[0][0]);
+                    } else {
+                      bracket.getRange(ltop - 1 + 3*i, 4).setValue(match[0][0]);
+                    }
+                  } else {
+                    bracket.getRange(ltop + 3 + 3*i, 2).setValue(match[0][0]);
+                  }
+                }
+              }
+            }
+            break;
+          }
         }
       }
       if (found) {break;}
@@ -1075,60 +943,8 @@ function updateDoubleBracket(stage) {
         let topShape = 4 * (2**j - 1) - 2*j - 1;
         let spacing = 8 * 2**j;
         for (let i=0; i<nshapes; i++) {
-          let match = bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+6, 2, 2).getValues();
-          if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
-            var topwins = Number(match[0][1]) + Number(mostRecent[1]);
-            var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
-            found = true;
-          } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
-            var topwins = Number(match[0][1]) + Number(mostRecent[3]);
-            var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
-            found = true;
-          }
-          if (found) {
-            bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+7, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-            var loc = 'l,' + j + ',' + i + ',f';
-            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-              bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+6, 1, 2).setBackground('#D9EBD3');
-              if (j == (nlround-3)/2) {
-                bracket.getRange(2**nround+3, 2*nround+2).setValue(match[0][0]);
-                bracket.getRange(ltop-1, 2).setValue('Finals');
-              } else {
-                bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).setValue(match[0][0]);
-              }
-              if (options[6][1]) {
-                let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
-                for (let k=0; k<nshapes; k++) {
-                  if(!tofill[k]) {
-                    places.getRange(2+k+2*nshapes,2).setValue(match[1][0]);
-                    break;
-                  }
-                }
-              }
-            } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-              bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6, 1, 2).setBackground('#D9EBD3');
-              if (j == (nlround-3)/2) {
-                bracket.getRange(2**nround+3, 2*nround+2).setValue(match[1][0]);
-                bracket.getRange(ltop-1, 2).setValue('Finals');
-              } else {
-                bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).setValue(match[1][0]);
-              }
-              if (options[6][1]) {
-                let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
-                for (let k=0; k<nshapes; k++) {
-                  if(!tofill[k]) {
-                    places.getRange(2+k+2*nshapes,2).setValue(match[0][0]);
-                    break;
-                  }
-                }
-              }
-            }
-            break;
-          } else {
-            match = bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4, 2, 2).getValues();
-            var loc = 'l,' + j + ',' + i + ',b';
+          if (bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).getValue() === '') {
+            let match = bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+6, 2, 2).getValues();
             if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
               var topwins = Number(match[0][1]) + Number(mostRecent[1]);
               var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
@@ -1139,35 +955,89 @@ function updateDoubleBracket(stage) {
               found = true;
             }
             if (found) {
-              bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+5, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
+              bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+7, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
+              var loc = 'l,' + j + ',' + i + ',f';
               if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-                bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4, 1, 2).setBackground('#D9EBD3');
-                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue(match[0][0]);
+                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+6, 1, 2).setBackground('#D9EBD3');
+                if (j == (nlround-3)/2) {
+                  bracket.getRange(2**nround+3, 2*nround+2).setValue(match[0][0]);
+                  bracket.getRange(ltop-1, 2).setValue('Finals');
+                } else {
+                  bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).setValue(match[0][0]);
+                }
                 if (options[6][1]) {
                   let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
                   for (let k=0; k<nshapes; k++) {
                     if(!tofill[k]) {
-                      places.getRange(2+k+3*nshapes,2).setValue(match[1][0]);
+                      places.getRange(2+k+2*nshapes,2).setValue(match[1][0]);
                       break;
                     }
                   }
                 }
               } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-                bracket.getRange(ltop + topShape + i*spacing + 5, 4*j+4, 1, 2).setBackground('#D9EBD3');
-                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue(match[1][0]);
+                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6, 1, 2).setBackground('#D9EBD3');
+                if (j == (nlround-3)/2) {
+                  bracket.getRange(2**nround+3, 2*nround+2).setValue(match[1][0]);
+                  bracket.getRange(ltop-1, 2).setValue('Finals');
+                } else {
+                  bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).setValue(match[1][0]);
+                }
                 if (options[6][1]) {
                   let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
                   for (let k=0; k<nshapes; k++) {
                     if(!tofill[k]) {
-                      places.getRange(2+k+3*nshapes,2).setValue(match[0][0]);
+                      places.getRange(2+k+2*nshapes,2).setValue(match[0][0]);
                       break;
                     }
                   }
                 }
               }
               break;
+            } else if (bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).getValue() === '') {
+              match = bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4, 2, 2).getValues();
+              var loc = 'l,' + j + ',' + i + ',b';
+              if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
+                var topwins = Number(match[0][1]) + Number(mostRecent[1]);
+                var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
+                found = true;
+              } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
+                var topwins = Number(match[0][1]) + Number(mostRecent[3]);
+                var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
+                found = true;
+              }
+              if (found) {
+                bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+5, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
+                if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
+                  bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4, 1, 2).setBackground('#D9EBD3');
+                  bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue(match[0][0]);
+                  if (options[6][1]) {
+                    let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                    let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                    for (let k=0; k<nshapes; k++) {
+                      if(!tofill[k]) {
+                        places.getRange(2+k+3*nshapes,2).setValue(match[1][0]);
+                        break;
+                      }
+                    }
+                  }
+                } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
+                  bracket.getRange(ltop + topShape + i*spacing + 5, 4*j+4, 1, 2).setBackground('#D9EBD3');
+                  bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue(match[1][0]);
+                  if (options[6][1]) {
+                    let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                    let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                    for (let k=0; k<nshapes; k++) {
+                      if(!tofill[k]) {
+                        places.getRange(2+k+3*nshapes,2).setValue(match[0][0]);
+                        break;
+                      }
+                    }
+                  }
+                }
+                break;
+              }
             }
           }
         }
@@ -1175,48 +1045,50 @@ function updateDoubleBracket(stage) {
       }
       if (!found) {
         for (let i=2**(nround-2); i>0; i--) {
-          let match = bracket.getRange(ltop + 4*i - 3, 2, 2, 2).getValues();
-          if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
-            var topwins = Number(match[0][1]) + Number(mostRecent[1]);
-            var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
-            found = true;
-          } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
-            var topwins = Number(match[0][1]) + Number(mostRecent[3]);
-            var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
-            found = true;
-          }
-          if (found) {
-            bracket.getRange(ltop + 4*i - 3, 3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-            var loc = 'l,f,' + i;
-            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-              bracket.getRange(ltop + 4*i - 3, 2, 1, 2).setBackground('#D9EBD3');
-              bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).setValue(match[0][0]);
-              if (options[6][1]) {
-                let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
-                for (let k=0; k<tofill.length; k++) {
-                  Logger.log(tofill);
-                  if (!tofill[k]) {
-                    places.getRange(2+k+2**(nround-1),2).setValue(match[1][0]);
-                    break;
-                  }
-                }
-              }
-            } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-              bracket.getRange(ltop + 4*i - 2, 2, 1, 2).setBackground('#D9EBD3');
-              bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).setValue(match[1][0]);
-              if (options[6][1]) {
-                let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
-                for (let k=0; k<tofill.length; k++) {
-                  if (!tofill[k]) {
-                    places.getRange(2+k+2**(nround-1),2).setValue(match[0][0]);
-                    break;
-                  }
-                }
-              }
+          if (bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).getValue() === '') {
+            let match = bracket.getRange(ltop + 4*i - 3, 2, 2, 2).getValues();
+            if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
+              var topwins = Number(match[0][1]) + Number(mostRecent[1]);
+              var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
+              found = true;
+            } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
+              var topwins = Number(match[0][1]) + Number(mostRecent[3]);
+              var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
+              found = true;
             }
-            break;
+            if (found) {
+              bracket.getRange(ltop + 4*i - 3, 3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
+              var loc = 'l,f,' + i;
+              if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
+                bracket.getRange(ltop + 4*i - 3, 2, 1, 2).setBackground('#D9EBD3');
+                bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).setValue(match[0][0]);
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                  let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
+                  for (let k=0; k<tofill.length; k++) {
+                    Logger.log(tofill);
+                    if (!tofill[k]) {
+                      places.getRange(2+k+2**(nround-1),2).setValue(match[1][0]);
+                      break;
+                    }
+                  }
+                }
+              } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
+                bracket.getRange(ltop + 4*i - 2, 2, 1, 2).setBackground('#D9EBD3');
+                bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).setValue(match[1][0]);
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                  let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
+                  for (let k=0; k<tofill.length; k++) {
+                    if (!tofill[k]) {
+                      places.getRange(2+k+2**(nround-1),2).setValue(match[0][0]);
+                      break;
+                    }
+                  }
+                }
+              }
+              break;
+            }
           }
         }
       }
@@ -1226,59 +1098,8 @@ function updateDoubleBracket(stage) {
         let topShape = 3 * (2**j - 1) - 2*j;
         let spacing = 6 * 2**j;
         for (let i=0; i<nshapes; i++) {
-          let match = bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+4, 2, 2).getValues();
-          if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
-            var topwins = Number(match[0][1]) + Number(mostRecent[1]);
-            var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
-            found = true;
-          } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
-            var topwins = Number(match[0][1]) + Number(mostRecent[3]);
-            var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
-            found = true;
-          }
-          if (found) {
-            bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+5, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-            var loc = 'l,' + j + ',' + i + ',f';
-            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-              bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+4, 1, 2).setBackground('#D9EBD3');
-              if (j == (nlround/2) - 1) {
-                bracket.getRange(2**nround+3, 2*nround+2).setValue(match[0][0]);
-                bracket.getRange(ltop-1, 2).setValue('Finals');
-              } else {
-                bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).setValue(match[0][0]);
-              }
-              if (options[6][1]) {
-                let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
-                for (let k=0; k<nshapes; k++) {
-                  if(!tofill[k]) {
-                    places.getRange(2+k+2*nshapes,2).setValue(match[1][0]);
-                    break;
-                  }
-                }
-              }
-            } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-              bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4, 1, 2).setBackground('#D9EBD3');
-              if (j == (nlround/2) - 1) {
-                bracket.getRange(2**nround+3, 2*nround+2).setValue(match[1][0]);
-                bracket.getRange(ltop-1, 2).setValue('Finals');
-              } else {
-                bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).setValue(match[1][0]);
-              }
-              if (options[6][1]) {
-                let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
-                for (let k=0; k<nshapes; k++) {
-                  if(!tofill[k]) {
-                    places.getRange(2+k+2*nshapes,2).setValue(match[0][0]);
-                    break;
-                  }
-                }
-              }
-            }
-            break;
-          } else {
-            match = bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2, 2, 2).getValues();
+          if (bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).getValue() === '') {
+            let match = bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+4, 2, 2).getValues();
             if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
               var topwins = Number(match[0][1]) + Number(mostRecent[1]);
               var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
@@ -1289,36 +1110,89 @@ function updateDoubleBracket(stage) {
               found = true;
             }
             if (found) {
-              bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-              var loc = 'l,' + j + ',' + i + ',b';
+              bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+5, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
+              var loc = 'l,' + j + ',' + i + ',f';
               if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
-                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2, 1, 2).setBackground('#D9EBD3');
-                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setValue(match[0][0]);
+                bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+4, 1, 2).setBackground('#D9EBD3');
+                if (j == (nlround/2) - 1) {
+                  bracket.getRange(2**nround+3, 2*nround+2).setValue(match[0][0]);
+                  bracket.getRange(ltop-1, 2).setValue('Finals');
+                } else {
+                  bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).setValue(match[0][0]);
+                }
                 if (options[6][1]) {
                   let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
                   for (let k=0; k<nshapes; k++) {
                     if(!tofill[k]) {
-                      places.getRange(2+k+3*nshapes,2).setValue(match[1][0]);
+                      places.getRange(2+k+2*nshapes,2).setValue(match[1][0]);
                       break;
                     }
                   }
                 }
               } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
-                bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+2, 1, 2).setBackground('#D9EBD3');
-                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setValue(match[1][0]);
+                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4, 1, 2).setBackground('#D9EBD3');
+                if (j == (nlround/2) - 1) {
+                  bracket.getRange(2**nround+3, 2*nround+2).setValue(match[1][0]);
+                  bracket.getRange(ltop-1, 2).setValue('Finals');
+                } else {
+                  bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).setValue(match[1][0]);
+                }
                 if (options[6][1]) {
                   let places = sheet.getSheetByName(stages[stage].name + ' Places');
-                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
                   for (let k=0; k<nshapes; k++) {
                     if(!tofill[k]) {
-                      places.getRange(2+k+3*nshapes,2).setValue(match[0][0]);
+                      places.getRange(2+k+2*nshapes,2).setValue(match[0][0]);
                       break;
                     }
                   }
                 }
               }
               break;
+            } else if (bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).getValue() === '') {
+              match = bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2, 2, 2).getValues();
+              if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
+                var topwins = Number(match[0][1]) + Number(mostRecent[1]);
+                var bottomwins = Number(match[1][1]) + Number(mostRecent[3]);
+                found = true;
+              } else if ((match[0][0] == mostRecent[2]) && (match[1][0] == mostRecent[0])) {
+                var topwins = Number(match[0][1]) + Number(mostRecent[3]);
+                var bottomwins = Number(match[1][1]) + Number(mostRecent[1]);
+                found = true;
+              }
+              if (found) {
+                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
+                var loc = 'l,' + j + ',' + i + ',b';
+                if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
+                  bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2, 1, 2).setBackground('#D9EBD3');
+                  bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setValue(match[0][0]);
+                  if (options[6][1]) {
+                    let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                    let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                    for (let k=0; k<nshapes; k++) {
+                      if(!tofill[k]) {
+                        places.getRange(2+k+3*nshapes,2).setValue(match[1][0]);
+                        break;
+                      }
+                    }
+                  }
+                } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
+                  bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+2, 1, 2).setBackground('#D9EBD3');
+                  bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setValue(match[1][0]);
+                  if (options[6][1]) {
+                    let places = sheet.getSheetByName(stages[stage].name + ' Places');
+                    let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                    for (let k=0; k<nshapes; k++) {
+                      if(!tofill[k]) {
+                        places.getRange(2+k+3*nshapes,2).setValue(match[0][0]);
+                        break;
+                      }
+                    }
+                  }
+                }
+                break;
+              }
             }
           }       
         }
@@ -2216,7 +2090,6 @@ function removeRandom(stage, row) {
   var loc = removal[7].split(',').map(x=>Number(x));
   var standings = sheet.getSheetByName(stages[stage].name + ' Standings');
   var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
-  var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
   
   var p1wins = Number(standings.getRange(loc[0],loc[1]+1).getValue()) - Number(removal[2]);
   standings.getRange(loc[0],loc[1]+1).setValue(p1wins ? p1wins : '');
