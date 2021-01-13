@@ -414,7 +414,7 @@ function singleBracketOptions(stage) {
     ["Seeding Method", "standard"],
     ["Consolation", "none"],
     ["Places Sheet", ""],
-    ["Winner Count", "1"]
+    ["Bracket Count", "1"]
   ]);
 
   options.getRange(5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'random', 'tennis'],true).build());
