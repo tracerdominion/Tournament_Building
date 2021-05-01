@@ -2292,11 +2292,22 @@ function removeRandom(stage, row) {
   var loc = removal[7].split(',').map(x=>Number(x));
   var standings = sheet.getSheetByName(stages[stage].name + ' Standings');
   var processing = sheet.getSheetByName(stages[stage].name + ' Processing');
+  var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
   
   var p1wins = Number(standings.getRange(loc[0],loc[1]+1).getValue()) - Number(removal[2]);
   standings.getRange(loc[0],loc[1]+1).setValue(p1wins ? p1wins : '');
   var p2wins = Number(standings.getRange(loc[2],loc[3]+1).getValue()) - Number(removal[4]);
   standings.getRange(loc[2],loc[3]+1).setValue(p2wins ? p2wins : '');
+  if (p1wins + p2wins == options[4][1]) {
+      standings.getRange(loc[0],loc[1]).setFontColor('#38761d');
+      standings.getRange(loc[2],loc[3]).setFontColor('#38761d');
+    } else if ((p1wins + p2wins > options[4][1])) {
+      standings.getRange(loc[0],loc[1]).setFontColor('#ff0000');
+      standings.getRange(loc[2],loc[3]).setFontColor('#ff0000');
+    } else {
+      standings.getRange(loc[0],loc[1]).setFontColor('#990000');
+      standings.getRange(loc[2],loc[3]).setFontColor('#990000');    
+    }
   processing.getRange(loc[4], 1, 2, 3).setValues([['','',''], ['','','']]);
   results.getRange(row, 7, 1, 2).setValues([['','removed']]).setFontColor(null);
   return true;
