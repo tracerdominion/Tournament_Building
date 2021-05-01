@@ -192,15 +192,7 @@ function adminSetup() {
   for (let i=1; i<playerSheet.length; i++) {
     names.push(playerSheet[i][1]);
   }
-  names.sort(function(a,b) {
-    if (a.toLowerCase() < b.toLowerCase()) {
-      return -1;
-    } else if (a.toLowerCase() > b.toLowerCase()) {
-      return 1;
-    } else if (a.toLowerCase() == b.toLowerCase()) {
-      return 0
-    }  
-  });
+  names.sort(lowerSort);
   var validation = FormApp.createTextValidation().requireNumberGreaterThanOrEqualTo(0).build();
   form.addListItem().setTitle('Your username').setChoiceValues(names).setRequired(true);
   form.addTextItem().setTitle('Your wins').setValidation(validation).setRequired(true);
@@ -398,6 +390,16 @@ function columnFinder(n) {
   } else {
     return letters[Math.floor((n-1)/26)-1] + letters[((n-1)%26)];
   }
+}
+
+function lowerSort(a,b) {
+  if (a.toLowerCase() < b.toLowerCase()) {
+    return -1;
+  } else if (a.toLowerCase() > b.toLowerCase()) {
+    return 1;
+  } else if (a.toLowerCase() == b.toLowerCase()) {
+    return 0
+  }  
 }
 
 
@@ -2023,6 +2025,7 @@ function randomOptions(stage) {
 function createRandom(stage) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var options = sheet.getSheetByName('Options').getRange(stage*10 + 1,1,10,2).getValues();
+  var playerNames = sheet.getSheetByName(options[1][1]).getRange("B2:B" + (Number(options[2][1]) + 1)).getValues().flat();
   
   //setup matches
   var standings = sheet.insertSheet(stages[stage].name + ' Standings');
@@ -2047,9 +2050,12 @@ function createRandom(stage) {
   standings.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=ISBLANK(B1)').setFontColor('#FFFFFF').setRanges([standings.getRange('A:A')]).build()]);
   var players = [];
   for (let i=0; i<options[2][1]; i++) {
-    players.push("=index('" + options[1][1] + "'!B:B," + (i+2) + ")");
+    players.push(["=index('" + options[1][1] + "'!B:B," + (i+2) + ")", playerNames[i]]);
   }
-  if (options[2][1] % 2) {players.push('OPEN');}
+  players.sort((a,b) => lowerSort(a[1], b[1]));
+  players = players.map(x => x[0]);
+
+  if (options[2][1] % 2) {players.push(['OPEN']);}
   var pllength = players.length;
   
   var matches = [];
@@ -2185,6 +2191,7 @@ function createRandom(stage) {
   }
   
   //put matches on sheet
+
   var topRow = ['Player'];
   for (let i=0; i<options[3][1]; i++) {
     topRow.push('Opponent ' + (i+1));
