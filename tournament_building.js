@@ -2547,14 +2547,16 @@ function updateGroups(stage) {
       var p2Group = groups[i][2];
     }
   }
-  if ((p1Group == p2Group) && !empty) {
-    processing.getRange(nextOpen, 1, 2, 5).setValues([[mostRecent[0], mostRecent[2], p1Group, mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], p1Group, mostRecent[3], mostRecent[1]]])
-    processing.getRange('F1').setValue(nextOpen+2);
-    sendResultToDiscord('Standings',sheet.getSheetByName(stages[stage].name + ' Standings').getSheetId());
-    var results = sheet.getSheetByName('Results');
-    var resultsLength = results.getDataRange().getNumRows();
-    results.getRange(resultsLength, 7).setValue(stages[stage].name);
-    results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(nextOpen);
+  if (p1Group == p2Group) {
+    if (!empty) {
+      processing.getRange(nextOpen, 1, 2, 5).setValues([[mostRecent[0], mostRecent[2], p1Group, mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], p1Group, mostRecent[3], mostRecent[1]]])
+      processing.getRange('F1').setValue(nextOpen+2);
+      sendResultToDiscord('Standings',sheet.getSheetByName(stages[stage].name + ' Standings').getSheetId());
+      var results = sheet.getSheetByName('Results');
+      var resultsLength = results.getDataRange().getNumRows();
+      results.getRange(resultsLength, 7).setValue(stages[stage].name);
+      results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(nextOpen);
+    }
     return true;
   } else {
     return false;
