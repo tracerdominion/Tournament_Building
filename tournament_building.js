@@ -2419,7 +2419,7 @@ AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
       let bottomrow = 1+ppg*(1+Math.floor(i/ppg));
       tables[last].push("=iferror(index(" + procSheet + "AA" + toprow + ":" + columnFinder(26+ppg) + bottomrow + 
         ",match(A" + (last+1) + "," + procSheet + "U" + toprow + ":U" + bottomrow +
-        "),match(A" + (last + 1 + j - (i%ppg)) + "," + procSheet + "U" + toprow + ":U" + bottomrow + ")))"
+        ",0),match(A" + (last + 1 + j - (i%ppg)) + "," + procSheet + "U" + toprow + ":U" + bottomrow + ",0)))"
       );
     }
     if (i % ppg == ppg-1) {
