@@ -12,17 +12,17 @@ A couple of notes on what a stage type should look like:
 * Should support any number of players - if a certain number is strongly desired, look at figuring out how byes might be incorporated
 * Have one output sheet that provides all information about both player position and matches to be scheduled
 * Take up no more than 3 sheets (except by option) - one for player position and matches, possibly one for processing, and possibly one (or optionally more) for a tranformation of the standings
-* Should include documentation as seen in section 6 of the instructions. You may message this to me via Discord.
+* Should include documentation as seen in section A of the instructions. You may message this to me via Discord.
 
 A stage type must include functions which can do the following:
 * Return a key-value set of options
 * Create and populate sheets for the stage to run
 * Update those sheets when new results come in
-* Remove the last result submitted
+* Remove a result with row given
 
 #### Options function
 
-Should take a single parameter `stage` which is the index of the stage in the stages array at the very top of the script.
+Should take two parameters `num` and `name`, the first of which is 8 less than the row number of the administration sheet corresponding to that stage, and the second of which is the name of the stage.
 Should return an array of length 2 arrays (subsequently called 'rows') which are key-value pairs for user provided options. There should be no more than 9 total rows.
 To match existing names, called `<stage_type>Options`.
 
@@ -41,7 +41,7 @@ Once completed, it should be appropriately added to the switch statement in the 
 
 #### Create functions
 
-Should take a single parameter `stage` which is the index of the stage in the stages array at the very top of the script.
+Should take two parameters `num` and `name`, the first of which is 8 less than the row number of the administration sheet corresponding to that stage, and the second of which is the name of the stage.
 To match existing names, called `create<Stage_type>`.
 
 This function should create and set up all sheets for this stage, without anything non-aesthetic needed to be added by the user. Be sure to consider how results will be processed.
@@ -52,7 +52,7 @@ Once completed, it should be appropriately added to the switch statements in bot
 
 #### Update (with new results) functions
 
-Should take a parameter `stage` which is the index of the stage in the stages array at the very top of the script.
+Should take two parameters `num` and `name`, the first of which is 8 less than the row number of the administration sheet corresponding to that stage, and the second of which is the name of the stage.
 To match existing names, called `update<Stage_type>`.
 Should return true if an update took place, and flase otherwise.
 
@@ -80,7 +80,7 @@ Once completed, it should be appropriately added to the switch statement in the 
 
 #### Removal functions
 
-Should take parameters `stage`, which is the index of the stage in the stages array at the very top of the script, and `row`, which is the row in the Results sheet that is to be removed.
+Should take two parameters `num` and `name`, the first of which is 8 less than the row number of the administration sheet corresponding to that stage, and the second of which is the name of the stage, and `row`, which is the row in the Results sheet that is to be removed.
 Should return true if the result is able to be removed, and false otherwise.
 To match existing names, called `remove<Stage_type>`.
 
