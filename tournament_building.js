@@ -50,7 +50,7 @@ function setupInitial() {
               ['Published Spreadsheet', '', '=hyperlink("' + prefill + '"&B2, "Shortened:")', ''],
               ['Signup Form', signupForm ? signupForm : 'none', signupForm ? '=hyperlink("' + prefill + '"&B3, "Shortened:")' : '', ''],
               ['Results Form', formURL, '=hyperlink("' + prefill + '"&B4, "Shortened:")', ''],
-              ['Discord Webhook', '', '=hyperlink("https://www.google.com/search?q=color+picker", "Color Hex:"', ''],
+              ['Discord Webhook', '', '=hyperlink("https://www.google.com/search?q=color+picker", "Color Hex:")', ''],
               ['','','',''],
               ['Stage', 'Type', 'Started','Finished']];
   admin.getRange(1, 1, 7, 4).setValues(info);
@@ -402,7 +402,8 @@ function createSignups() {
   ScriptApp.newTrigger('onSignup').forForm(form).onFormSubmit().create();
   var formURL = 'https://docs.google.com/forms/d/' + form.getId() + '/viewform';
 
-  var sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+  sheet.renameActiveSheet(sheet.getActiveSheet().getName());
+  var sheets = sheet.getSheets();
   for (let i=0; i < sheets.length; i++) {
     if (/^Form Responses/.test(sheets[i].getName())) {
       sheets[i].setName('Signups');
@@ -592,7 +593,7 @@ function singleBracketOptions(num, name) {
     ["Bracket Count", "1"]
   ]);
 
-  options.getRange(base + 5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'random', 'tennis', 'reseeding'],true).build());
+  options.getRange(base + 5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'random', 'tennis'],true).build());
   options.getRange(base + 6,2).insertCheckboxes();
   options.getRange(base + 7,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['none', 'third'],true).build());
   options.getRange(base + 8,2).insertCheckboxes();
@@ -2169,13 +2170,13 @@ function newSwissRound(num, name) {
     var players = swiss.getRange(2, 2, options[2][1], 1).getValues().flat();
     var assigned = [];
     var processing = sheet.getSheetByName(name + ' Processing');
-    var playedMatches = processing.getRange('A:B').getValues();
+    var playedMatches = processing.getRange(1,1,processing.getLastRow(),2).getValues();
     
     //trim playedMatches
     var pmlen = playedMatches.length;
-    for (let i=1; i < pmlen; i++) {
+    for (let i=pmlen-1; i >= 0; i--) {
       if (!playedMatches[i][0]) {
-        playedMatches.splice(i,pmlen-i)
+        playedMatches.splice(i,1);
         break;
       }
     }
