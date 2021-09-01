@@ -2058,7 +2058,8 @@ function createSwiss(num, name) {
   //standings
   var standings = [['Pl', 'Player', 'Wins', 'Losses']];
   for (let i=1; i <= options[2][1]; i++) {
-    standings.push([i, "='" + name + " Processing'!G" + (i+1), "='" + name + " Processing'!H" + (i+1), "='" + name + " Processing'!I" + (i+1)]);
+    standings.push(['=if(and(C' + (i+1) + '=C' + i + ', D' + (i+1) + '=D' + i +'), "", ' + i + ')',
+     "='" + name + " Processing'!G" + (i+1), "='" + name + " Processing'!H" + (i+1), "='" + name + " Processing'!I" + (i+1)]);
   }
   swiss.getRange(1, 1, standings.length, 4).setValues(standings);
   
@@ -2549,7 +2550,8 @@ function createRandom(num, name) {
   //standings table copy from processing
   var table = [['Pl', 'Player', 'Win Pct','Wins', 'Losses', 'SoS']];
   for (let i=1; i <= options[2][1]; i++) {
-    table.push([i, "='"+name+" Processing'!E"+(i+1), "='"+name+" Processing'!F"+(i+1),
+    table.push(['=if(and(C' + (i+1) + '=C' + i + ', F' + (i+1) + '=F' + i +'), "", ' + i + ')',
+     "='"+name+" Processing'!E"+(i+1), "='"+name+" Processing'!F"+(i+1),
       "='"+name+" Processing'!G"+(i+1), "='"+name+" Processing'!H"+(i+1), "='"+name+" Processing'!I"+(i+1)]);
   }
   standings.getRange(1,1,table.length,6).setValues(table);
