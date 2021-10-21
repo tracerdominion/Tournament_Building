@@ -19,6 +19,8 @@ A stage type must include functions which can do the following:
 * Create and populate sheets for the stage to run
 * Update those sheets when new results come in
 * Remove a result with row given
+* Break a tie between players on the player position sheet
+* Drop a player from the stage (and adjust future matches accordingly)
 
 #### Options function
 
@@ -44,11 +46,13 @@ Once completed, it should be appropriately added to the switch statement in the 
 Should take two parameters `num` and `name`, the first of which is 8 less than the row number of the administration sheet corresponding to that stage, and the second of which is the name of the stage.
 To match existing names, called `create<Stage_type>`.
 
-This function should create and set up all sheets for this stage, without anything non-aesthetic needed to be added by the user. Be sure to consider how results will be processed.
+This function should create and set up all sheets for this stage and add warnings upon edit where appropriate, without anything non-aesthetic needed to be added by the user. Be sure to consider how results will be processed.
+
+Users should be alerted if an option they provide does not fit the stage.
 
 Be sure to import players by index (not value or cell reference) from the seeding sheet - this is essential for automatic linking once results fill in.
 
-Once completed, it should be appropriately added to the switch statements in both the `setupSheets()` and the `remakeStages()` functions.
+Once completed, it should be appropriately added to the switch statement in the `addStage()` function. There should also be a process for deleting all associated sheets, which should be inserted into the switch statement in the `removeStage()` function.
 
 #### Update (with new results) functions
 
@@ -80,12 +84,34 @@ Once completed, it should be appropriately added to the switch statement in the 
 
 #### Removal functions
 
-Should take two parameters `num` and `name`, the first of which is 8 less than the row number of the administration sheet corresponding to that stage, and the second of which is the name of the stage, and `row`, which is the row in the Results sheet that is to be removed.
+Should take parameters `num` and `name`, the first of which is 8 less than the row number of the administration sheet corresponding to that stage, and the second of which is the name of the stage, and `row`, which is the row in the Results sheet that is to be removed.
 Should return true if the result is able to be removed, and false otherwise.
 To match existing names, called `remove<Stage_type>`.
 
-This should take the result in the `row` numbered row of the results sheet and attempt to remove it. If there are dependent matches with results (for example the match a winner plays in) it should fail to remove the result and log a failure message and reason. Otherwise, it should remove any sign of it from sheets intended for display. 
+This should take the result in the `row` numbered row of the results sheet and attempt to remove it. If there are dependent matches with results (for example the match a winner plays in) it should fail to remove the result and alert a failure message and reason. Otherwise, it should remove any sign of it from sheets intended for display. 
 It should also remove the stage name label from that row in the results sheet, to indicate that the result is not being accounted for anywhere.
+
+Once completed, it should be appropriately added to the switch statement in the `onFormSubmit()` function.
+
+#### Tiebreaking functions
+
+Should take parameters `num` and `name`, the first of which is 8 less than the row number of the administration sheet corresponding to that stage, and the second of which is the name of the stage, and `players`, which is an array of players involved in the tie ordered by what their standing should be (starting from the top of the tie)
+Should return true if the tie is found and successfully broken.
+To match existing names, called `tiebreak<Stage_type>`
+
+This should rearrange the names of the players provided on a sheet giving ranks to the players to match the order provided. If the players are not in a tie, it should fail and alert the user. If the stage is not yet complete, it should ask for confirmation from the user.
+
+Once completed, it should be appropriately added to the switch statement in the `addTiebreaker()` function.
+
+#### Drop Player functions
+
+Should take parameters `num` and `name`, the first of which is 8 less than the row number of the administration sheet corresponding to that stage, and the second of which is the name of the stage, and `player`, which is the name of the player to be dropped.
+Does not need to return a value.
+To match existing names, called `drop<Stage_type>`
+
+This should ensure no future matches are assigned to the player, and drop them to the bottom of their standings. Other appropriate measures based on the nature of the stage type should be implemented.
+
+Once completed, it should be appropriately added to the switch statement in the `dropPlayer()` function.
 
 #### Helpers
 

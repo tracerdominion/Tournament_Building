@@ -8,7 +8,10 @@ function onOpen() {
     .addItem("Make Sheets", "makeSheets")
     .addItem("Delete Stage", "deleteStage")
     .addSeparator()
-    .addItem("Remove Result", "removeResult")
+    .addItem("Remove Result", "removeResultInterface")
+    .addItem("Break a Tie", "addTiebreaker")
+    .addItem("Drop Player", "dropPlayer")
+    .addSeparator()
     .addItem("Test Webhook", "testWebhook")
     .addToUi();
 }
@@ -18,10 +21,10 @@ function setupInitial() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
 
   if (sheet.getSheetByName('Administration')) {
-    ui.alert("The setup for this tournament has already been started.", ui.ButtonSet.OK);
+    ui.alert("The setup for this tournament has already been started.", "", ui.ButtonSet.OK);
     return;
   }
-  response = ui.alert("Would you like a signup form for your tournament?", ui.ButtonSet.YES_NO);
+  response = ui.alert("Would you like a signup form for your tournament?", "", ui.ButtonSet.YES_NO);
   var signupForm = false;
   if (response == ui.Button.YES) {
     signupForm = createSignups();
@@ -42,25 +45,29 @@ function setupInitial() {
   var formURL = 'https://docs.google.com/forms/d/' + form.getId() + '/viewform';
 
   var admin = sheet.insertSheet("Administration");
-  admin.deleteColumns(5, 22);
+  admin.deleteColumns(6, 21);
   admin.deleteRows(7, 994);
   admin.setColumnWidth(1, 150);
+  admin.setColumnWidth(5, 30);
+  admin.getRange('B3:B4').protect().setWarningOnly(true);
   const prefill = "https://docs.google.com/forms/d/e/1FAIpQLSfZGOHcw0YhIsWD_dROOlvNdI8FBN9wuC-s7bitd31Ie1Xh1w/viewform?entry.1566745465=";
-  let info = [['Tournament Name', sheet.getName(), '', ''],
-              ['Published Spreadsheet', '', '=hyperlink("' + prefill + '"&B2, "Shortened:")', ''],
-              ['Signup Form', signupForm ? signupForm : 'none', signupForm ? '=hyperlink("' + prefill + '"&B3, "Shortened:")' : '', ''],
-              ['Results Form', formURL, '=hyperlink("' + prefill + '"&B4, "Shortened:")', ''],
-              ['Discord Webhook', '', '=hyperlink("https://www.google.com/search?q=color+picker", "Color Hex:")', ''],
-              ['','','',''],
-              ['Stage', 'Type', 'Started','Finished']];
-  admin.getRange(1, 1, 7, 4).setValues(info);
+  let info = [['Tournament Name', sheet.getName(), '', '', ''],
+              ['Published Spreadsheet', "https://docs.google.com/spreadsheet/pub?key=" + sheet.getId(), '=hyperlink("' + prefill + '"&B2, "Shortened:")', '', ''],
+              ['Signup Form', signupForm ? signupForm : 'none', signupForm ? '=hyperlink("' + prefill + '"&B3, "Shortened:")' : '', '', ''],
+              ['Results Form', formURL, '=hyperlink("' + prefill + '"&B4, "Shortened:")', '', ''],
+              ['Discord Webhook', '', '=hyperlink("https://www.google.com/search?q=color+picker", "Color Hex:")', '', ''],
+              ['','','','', ''],
+              ['Stage', 'Type', 'Started','Finished', 'R']];
+  admin.getRange(1, 1, 7, 5).setValues(info);
   admin.getRange(2, 3, 4, 1).setHorizontalAlignment('right');
+  admin.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=REGEXMATCH(B2, "' + sheet.getId() + '")').setBackground('#FFFF00').setRanges([admin.getRange(2,2)]).build()]);
 
   var sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
   for (let i=0; i < sheets.length; i++) {
     if (/^Form Responses/.test(sheets[i].getName())) {
       sheets[i].setName('Results');
       sheets[i].getRange(1, 7).setValue('Stage');
+      sheets[i].protect().setWarningOnly(true);
     }
   }
 
@@ -126,10 +133,11 @@ function newStage() {
 
   admin.appendRow([stageName, stageType]);
   var stageNumber = admin.getLastRow() - 8;
-  admin.getRange(stageNumber + 8, 3, 1, 2).insertCheckboxes()
+  admin.getRange(stageNumber + 8, 3, 1, 2).insertCheckboxes();
+  admin.getRange(stageNumber + 8, 1, 1, 2).protect().setWarningOnly(true);
+  admin.getRange(stageNumber + 8, 5).protect().setWarningOnly(true);
 
   var options = sheet.getSheetByName("Options");
-  options.insertRows(options.getLastRow()+1, 10);
   switch (stageType) {
       case 'single':
         singleBracketOptions(stageNumber, stageName);
@@ -161,7 +169,7 @@ function newStage() {
 function makeSheets() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var admin = sheet.getSheetByName("Administration");
-  var stageList = admin.getRange(8,1,admin.getLastRow()-7,4).getValues();
+  var stageList = admin.getRange(8,1,admin.getLastRow()-7,5).getValues();
   var stageNames = stageList.map(x => x[0]).concat([""]);
 
   var ui = SpreadsheetApp.getUi();
@@ -180,8 +188,11 @@ function makeSheets() {
     for (let i=0; i<stageList.length; i++) {
       if (!stageList[i][2]) {
         removeStage(stageList[i][0], stageList[i][1]);
-        addStage(i, stageList[i][0], stageList[i][1]);
-        remade.push(stageList[i][0]);
+        let success = addStage(i, stageList[i][0], stageList[i][1]);
+        if (success) {
+          admin.getRange(8+i, 5).setValue('=countif(Results!G2:G, A' + (8+i) + ')');
+          remade.push(stageList[i][0]);
+        }
       }
     }
   } else {
@@ -193,17 +204,27 @@ function makeSheets() {
       return;
     }
     removeStage(stageName, stageType);
-    addStage(stageNumber, stageName, stageType);
+    var success = addStage(stageNumber, stageName, stageType);
+    if (success) {
+      admin.getRange(8+stageNumber, 5).setValue('=countif(Results!G2:G, A' + (8+stageNumber) + ')');
+    }
   }
   
-  ui.alert("Sheets made for " + ((response.getResponseText() === "") ? "stages: " + remade.join(", ") : "the " + stageName + " stage") + ".", "If you change your mind about an option, simply change it in the Options sheet and rerun this function by going to Tournaments > Make Sheets.", ui.ButtonSet.OK)
+  sheet.setActiveSheet(admin);
+  if (response.getResponseText() === "") {
+    if (remade.length) {
+      ui.alert("Sheets made for stages: " + remade.join(", ") + ".", "If you change your mind about an option, change it in the Options sheet and rerun this function by going to Tournaments > Make Sheets.", ui.ButtonSet.OK);
+    }
+  } else if (success) {
+    ui.alert("Sheets made for the " + stageName + " Stage.", "If you change your mind about an option, change it in the Options sheet and rerun this function by going to Tournaments > Make Sheets.", ui.ButtonSet.OK);
+  }
 }
 
 function deleteStage() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var admin = sheet.getSheetByName("Administration");
   var options = sheet.getSheetByName("Options");
-  var stageList = admin.getRange(8,1,admin.getLastRow()-7,4).getValues();
+  var stageList = admin.getRange(8,1,admin.getLastRow()-7,5).getValues();
   var stageNames = stageList.map(x => x[0]);
 
   var ui = SpreadsheetApp.getUi();
@@ -232,83 +253,79 @@ function deleteStage() {
 
 function addStage(num, name, type) {
   switch (type) {
-      case 'single':
-        createSingleBracket(num, name);
-        break;
-      case 'double':
-        createDoubleBracket(num, name);
-        break;
-      case 'swiss':
-        createSwiss(num, name);
-        break;
-      case 'random':
-        createRandom(num, name);
-        break;
-      case 'group':
-        createGroups(num, name);
-        break;
-      case 'barrage':
-        createBarrage(num, name);
-        break;
-    }
+    case 'single':
+      return createSingleBracket(num, name);
+    case 'double':
+      return createDoubleBracket(num, name);
+    case 'swiss':
+      return createSwiss(num, name);
+    case 'random':
+      return createRandom(num, name);
+    case 'group':
+      return createGroups(num, name);
+    case 'barrage':
+      return createBarrage(num, name);
+  }
 }
 
 function removeStage(name, type) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   switch (type) {
-        case 'single':
-          if (sheet.getSheetByName(name + ' Bracket')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Bracket'));}
-          if (sheet.getSheetByName(name + ' Places')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Places'));}
-          break;
-        case 'double':
-          if (sheet.getSheetByName(name + ' Bracket')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Bracket'));}
-          if (sheet.getSheetByName(name + ' Places')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Places'));}
-          break;
-        case 'swiss':
-          if (sheet.getSheetByName(name + ' Standings')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Standings'));}
-          if (sheet.getSheetByName(name + ' Processing')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Processing'));}
-          break;
-        case 'random':
-          if (sheet.getSheetByName(name + ' Standings')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Standings'));}
-          if (sheet.getSheetByName(name + ' Processing')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Processing'));}
-          break;
-        case 'group':
-          if (sheet.getSheetByName(name + ' Standings')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Standings'));}
-          if (sheet.getSheetByName(name + ' Processing')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Processing'));}
-          var sheets = sheet.getSheets();
-          let aggRegex = new RegExp('^' + name + ' Aggregation');
-          for (let j=sheets.length-1; j>=0; j--) {
-            if(aggRegex.test(sheets[j].getSheetName())) {
-              sheet.deleteSheet(sheets[j]);
-              sheets.splice(j,1);
-            }
-          }
-          break;
-        case 'barrage':
-          if (sheet.getSheetByName(name + ' Matches')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Matches'));}
-          if (sheet.getSheetByName(name + ' Places')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Places'));}
-          break;
+    case 'single':
+      if (sheet.getSheetByName(name + ' Bracket')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Bracket'));}
+      if (sheet.getSheetByName(name + ' Places')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Places'));}
+      break;
+    case 'double':
+      if (sheet.getSheetByName(name + ' Bracket')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Bracket'));}
+      if (sheet.getSheetByName(name + ' Places')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Places'));}
+      break;
+    case 'swiss':
+      if (sheet.getSheetByName(name + ' Standings')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Standings'));}
+      if (sheet.getSheetByName(name + ' Processing')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Processing'));}
+      break;
+    case 'random':
+      if (sheet.getSheetByName(name + ' Standings')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Standings'));}
+      if (sheet.getSheetByName(name + ' Processing')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Processing'));}
+      break;
+    case 'group':
+      if (sheet.getSheetByName(name + ' Standings')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Standings'));}
+      if (sheet.getSheetByName(name + ' Processing')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Processing'));}
+      var sheets = sheet.getSheets();
+      let aggRegex = new RegExp('^' + name + ' Aggregation');
+      for (let j=sheets.length-1; j>=0; j--) {
+        if(aggRegex.test(sheets[j].getSheetName())) {
+          sheet.deleteSheet(sheets[j]);
+          sheets.splice(j,1);
+        }
       }
+      break;
+    case 'barrage':
+      if (sheet.getSheetByName(name + ' Matches')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Matches'));}
+      if (sheet.getSheetByName(name + ' Places')) {sheet.deleteSheet(sheet.getSheetByName(name + ' Places'));}
+      break;
+  }
 }
 
-function removeResult() {
+function removeResultInterface() {
   var ui = SpreadsheetApp.getUi();
   var response = ui.prompt("Enter the row number of the result you wish to remove.", ui.ButtonSet.OK_CANCEL);
+  var rowToRemove = response.getResponseText();
+
+  while (!/^\d+$/.test(rowToRemove) && (response.getSelectedButton() == ui.Button.OK)) {
+    response = ui.prompt("Non-number entered", "Enter the row number of the result you wish to remove.", ui.ButtonSet.OK_CANCEL);
+    rowToRemove = response.getResponseText();
+  }
   if (response.getSelectedButton() != ui.Button.OK) {
     return;
   }
-  var rowToRemove = response.getResponseText();
+  
+  removeResult(Number(rowToRemove));
+}
 
-  if (/^\d+$/.test(rowToRemove)) {
-    rowToRemove = Number(rowToRemove);
-  } else {
-    ui.alert("Non-number entered");
-    return;
-  }
-
+function removeResult(rowToRemove) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
-  var admin = sheet.getSheetByName('Administration').getDataRange().getValues()
-  var stageList = admin.slice(7);
+  var admin = sheet.getSheetByName('Administration');
+  var stageList = admin.getRange(8,1,admin.getLastRow()-7,5).getValues();
   var stageNames = stageList.map(x => x[0]);
   var removal = sheet.getSheetByName('Results').getRange(rowToRemove,1,1,8).getValues()[0];
   var success = false;
@@ -339,7 +356,7 @@ function removeResult() {
           break;
       }
       if (success) {
-        var form = FormApp.openByUrl(admin[3][1].replace(/viewform$/, 'edit'));
+        var form = FormApp.openByUrl(admin.getRange(4,2).getValue().replace(/viewform$/, 'edit'));
         var items = form.getItems();
         var zeroMatch = form.createResponse();
         zeroMatch.withItemResponse(items[0].asListItem().createResponse(removal[1])).withItemResponse(items[1].asTextItem().createResponse('0'));
@@ -347,6 +364,22 @@ function removeResult() {
         zeroMatch.withItemResponse(items[4].asTextItem().createResponse('Removal ' + rowToRemove + ' - ' + removal[6] + ': ' + removal[1] + ' ' + removal[2] + '-' + removal[4] + ' ' + removal[3]));
         zeroMatch = zeroMatch.toPrefilledUrl().replace("viewform", "formResponse") + "&submit=Submit";
         UrlFetchApp.fetch(zeroMatch);
+        if ((stageList[stageNumber][4] == 1) && (admin.getRange(8+stageNumber,5).getValue() == 0)) {
+          let optionsProtections = sheet.getSheetByName('Options').getProtections(SpreadsheetApp.ProtectionType.RANGE);
+          for (prot of optionsProtections) {
+            if (prot.getRange().getRow() == 1+10*stageNumber) {
+              prot.remove();
+              break;
+            }
+          }
+          let adminProtections = admin.getProtections(SpreadsheetApp.ProtectionType.RANGE);
+          for (prot of adminProtections) {
+            let prange = prot.getRange();
+            if ((prange.getColumn() == 3) && (prange.getRow() == 8+stageNumber)) {
+              prot.remove();
+            }
+          }
+        }
       }
     } else {
       ui.alert('Removal Failure: the result is from an inactive stage.');
@@ -354,6 +387,113 @@ function removeResult() {
   } else {
     ui.alert('Removal Failure: the result is not in any stage.');
   }
+}
+
+function addTiebreaker() {
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt("Which player won the tiebreaker?", "If there are multiple players to be rearranged, list them in the order they should appear in the standings, separated by commas.", ui.ButtonSet.OK_CANCEL);
+  if (response.getSelectedButton() != ui.Button.OK) {
+    return;
+  }
+  var tiedPlayers = response.getResponseText().split(",").map(x => x.trim());
+
+  var admin = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Administration');
+  var stageList = admin.getRange(8,1,admin.getLastRow()-7,4).getValues();
+  var found = false;
+  
+  for (let i=stageList.length-1; i>=0; i--) {
+    if ((stageList[i][2]) && (!stageList[i][3])) {
+      switch (stageList[i][1]) {
+        case 'single':
+        case 'double':
+        case 'barrage':
+          found = tiebreakPlaces(i, stageList[i][0], tiedPlayers);
+          break;
+        case 'swiss':
+          found = tiebreakSwiss(i, stageList[i][0], tiedPlayers);
+          break;
+        case 'random':
+          found = tiebreakRandom(i, stageList[i][0], tiedPlayers);
+          break;
+        case 'group':
+          found = tiebreakGroups(i, stageList[i][0], tiedPlayers);
+          break;
+      }
+    }
+    if (found) {break;}
+  }
+
+  if (!found) {
+    ui.alert("The player(s) entered were not found in ties in any active stages with formats supporting ties. No tiebreakers were applied.", ui.ButtonSet.OK);
+  }
+}
+
+function dropPlayer() {
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt("Which player should be dropped?", ui.ButtonSet.OK_CANCEL);
+  if (response.getSelectedButton() != ui.Button.OK) {
+    return;
+  }
+  var player = response.getResponseText();
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var admin = sheet.getSheetByName('Administration');
+  var stageList = admin.getRange(8,1,admin.getLastRow()-7,4).getValues();
+  var options = sheet.getSheetByName('Options');
+  var dropFrom = [];
+
+  for (let i=stageList.length-1; i>=0; i--) {
+    if ((stageList[i][2]) && (!stageList[i][3])) {
+      let seedInfo = options.getRange(10*i+2, 2, 2, 1).getValues().flat();
+      let playerList = sheet.getSheetByName(seedInfo[0]).getRange(2, 2, seedInfo[1], 1).getValues().flat();
+      if (playerList.includes(player)) {
+        dropFrom.push([i, stageList[i][0], stageList[i][1]]);
+      }
+    }
+  }
+
+  if (!dropFrom.length) {
+    ui.alert("That player does not appear to be in any active stages. No drop made.", ui.ButtonSet.OK);
+    return;
+  } else {
+    let response = ui.alert("Please confirm the drop.", "Are you sure you would like to drop " + player + " from the stages: " + dropFrom.map(x => x[1]).join(", ") + "?", ui.ButtonSet.YES_NO);
+    if (response != ui.Button.YES) {
+      ui.alert("No drop made.", ui.ButtonSet.OK);
+      return;
+    }
+  }
+
+  for (stage of dropFrom) {
+    switch (stage[2]) {
+      case 'single':
+        dropSingleBracket(stage[0], stage[1], player);
+        break;
+      case 'double':
+        dropDoubleBracket(stage[0], stage[1], player);
+        break;
+      case 'swiss':
+        dropSwiss(stage[0], stage[1], player);
+        break;
+      case 'random':
+        dropRandom(stage[0], stage[1], player);
+        break;
+      case 'group':
+        dropGroups(stage[0], stage[1], player);
+        break;
+      case 'barrage':
+        dropBarrage(stage[0], stage[1], player);
+        break;
+    }
+  }
+
+  var resultsForm = FormApp.openByUrl(sheet.getSheetByName("Administration").getRange(4,2).getValue().replace(/viewform$/, "edit"));
+  var questions = resultsForm.getItems();
+  var names = questions[0].asListItem().getChoices().map(x => x.getValue());
+  names.splice(names.indexOf(player), 1);
+  questions[0].asListItem().setChoiceValues(names);
+  questions[2].asListItem().setChoiceValues(names);
+
+  ui.alert(player + " dropped from stages: " + dropFrom.map(x => x[1]).join(", "), "Their name has also been removed from the results form.", ui.ButtonSet.OK);
 }
 
 function testWebhook() {
@@ -414,8 +554,9 @@ function createSignups() {
 }
 
 function onFormSubmit() {
-  var admin = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Administration');
-  var stageList = admin.getRange(8,1,admin.getLastRow()-7,4).getValues();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var admin = sheet.getSheetByName('Administration');
+  var stageList = admin.getRange(8,1,admin.getLastRow()-7,5).getValues();
   var found = false;
   
   for (let i=stageList.length-1; i>=0; i--) {
@@ -441,7 +582,13 @@ function onFormSubmit() {
           break;
       }
     }
-    if (found) {break;}
+    if (found) {
+      if ((stageList[i][4] == 0) && (admin.getRange(8+i,5).getValue() == 1)) {
+        sheet.getSheetByName('Options').getRange(i*10 + 1,1,10,2).protect().setWarningOnly(true);
+        admin.getRange(8+i,3).protect().setWarningOnly(true);
+      }
+      break;
+    }
   }
   
   if (!found) {
@@ -487,7 +634,7 @@ function sendResultToDiscord(name, displayType, gid) {
     if (mostRecent[4]) {
       display += '\n' + mostRecent[4];
     }
-    display += '\n[Current ' + name + ' ' + displayType + '](' + admin[1][1] + '?gid=' + gid + ')';
+    display += '\n[Current ' + name + ' ' + displayType + '](' + admin[1][1] + (/pubhtml$/.test(admin[1][1]) ? '?' : '&') + 'gid=' + gid + ')';
     
     var scoreEmbed = {
       "method": "post",
@@ -539,7 +686,7 @@ function onSignup() {
           {
             "title": mostRecent[0] + " has signed up!",
             "color": parseInt('0x'.concat(admin[4][3].slice(1))),
-            "description": "That makes " + (signups.getLastRow() - 1) + " players who want to play in " + sheet.getName() + "\n\n**[Full List of Signups](" + admin[1][1] + "?gid=" + signups.getSheetId() + ")**"
+            "description": "That makes " + (signups.getLastRow() - 1) + " players who want to play in " + sheet.getName() + "\n\n**[Full List of Signups](" + admin[1][1] + (/pubhtml$/.test(admin[1][1]) ? "?" : "&") + "gid=" + signups.getSheetId() + ")**"
           }
         ]
       })
@@ -581,7 +728,7 @@ function singleBracketOptions(num, name) {
   var options = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Options');
   const base = 10*num;
 
-  options.getRange(base + 1,1,9,2).setValues([
+  options.getRange(base + 1,1,11,2).setValues([
     ["''" + name + "' Single Elimination Options", ""],
     ["Seeding Sheet", ""],
     ["Number of Players", ""],
@@ -590,7 +737,8 @@ function singleBracketOptions(num, name) {
     ["Reseeding", ""],
     ["Consolation", "none"],
     ["Places Sheet", ""],
-    ["Bracket Count", "1"]
+    ["Bracket Count", "1"],
+    ["",""],["",""]
   ]);
 
   options.getRange(base + 5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'random', 'tennis'],true).build());
@@ -600,13 +748,23 @@ function singleBracketOptions(num, name) {
 }
 
 function createSingleBracket(num, name) {
+  var ui = SpreadsheetApp.getUi();
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
   var nplayers = Number(options[2][1]);
   var nbrackets = Number(options[8][1]);
+  if (nbrackets < 1) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "The number of brackets must be at least 1.", ui.ButtonSet.OK);
+    return false;
+  } else if (nplayers < 2*nbrackets) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "The number of players must be at least 2 times the number of brackets.", ui.ButtonSet.OK);
+    return false;
+  }
+  if (nbrackets > 1) {options[6][1] = 'none';}
   var nround = Math.ceil(Math.log(nplayers/nbrackets)/Math.log(2));
   var bracketSize = 2**(nround + 1);
   var bracket = sheet.insertSheet(name + ' Bracket');
+  bracket.protect().setWarningOnly(true);
   bracket.deleteRows(2, 999);
   if ((nbrackets == 1) && (options[6][1] == 'third') && (nround < 4)) {
     bracket.insertRows(1, 3*bracketSize/4 + 5)
@@ -631,7 +789,7 @@ function createSingleBracket(num, name) {
     }
   }
   
-  if ((nbrackets == 1) && (options[6][1] == 'third')) {
+  if (options[6][1] == 'third') {
     let top = 2**nround + 2**(nround-1) + 4
     bracket.getRange(top, 2*nround, 2, 2).setBorder(true, true, true, true, null, null, null, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
     bracket.getRange(top-1, 2*nround).setFontColor('#b7b7b7').setValue('Third Place Match');
@@ -741,6 +899,7 @@ function createSingleBracket(num, name) {
   //places sheet if desired
   if (options[7][1]) {
     var places = sheet.insertSheet(name + ' Places');
+    places.protect().setWarningOnly(true);
     places.deleteColumns(3,24);
     places.setColumnWidth(1,40);
     places.setColumnWidth(2,150);
@@ -761,6 +920,8 @@ function createSingleBracket(num, name) {
     }
     places.deleteRows(nplayers + 2, 999-Number(nplayers));
   }
+
+  return true;
 }
 
 function updateSingleBracket(num, name) {
@@ -771,9 +932,10 @@ function updateSingleBracket(num, name) {
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
   var nplayers = Number(options[2][1]);
   var nbrackets = Number(options[8][1]);
+  if (nbrackets > 1) {options[6][1] = 'none';}
   var nround = Math.ceil(Math.log(nplayers/nbrackets)/Math.log(2));
   var bracketSize = 2**(nround + 1);
-  var gamesToWin = options[3][1];
+  var gamesToWin = Number(options[3][1]);
   var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   var found = false;
   
@@ -798,7 +960,7 @@ function updateSingleBracket(num, name) {
             var loc = b + ',' + j + ',' + i;
             if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
               if (j != nround) {
-                if (options[5][1] && !((j == nround - 1) && (nbrackets == 1))) {
+                if (options[5][1]) {
                   let winList = bracket.getRange(1, 2*j).getValue();
                   bracket.getRange(1, 2*j).setValue(winList + "~" + match[0][0] + "~");
                   reseed(num, name, j+1);
@@ -806,7 +968,7 @@ function updateSingleBracket(num, name) {
                   bracket.getRange(b*bracketSize + space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[0][0]);
                 }
                 if ((j == nround - 1) && (nbrackets == 1) && (options[6][1] == 'third')) {
-                  bracket.getRange(4 + 3*space + ((i==1)?1:0), 2*j+2).setValue(match[1][0]);
+                  bracket.getRange(4 + 3*space + i, 2*j+2).setValue(match[1][0]);
                 } else if (options[7][1]) {
                   let places = sheet.getSheetByName(name + ' Places');
                   let fillLength = nbrackets*nmatches;
@@ -845,7 +1007,7 @@ function updateSingleBracket(num, name) {
                 } else {
                   bracket.getRange(b*bracketSize + space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue(match[1][0]);
                 }
-                if ((j == nround - 1) && (nbrackets == 1) && (options[6][1] == 'third')) {
+                if ((j == nround - 1) && (options[6][1] == 'third')) {
                   bracket.getRange(4 + 3*space + ((i==1)?1:0), 2*j+2).setValue(match[0][0]);
                 } else if (options[7][1]) {
                   let places = sheet.getSheetByName(name + ' Places');
@@ -878,7 +1040,7 @@ function updateSingleBracket(num, name) {
               bracket.getRange(b*bracketSize + space + 2*i*space+1, 2*j, 1, 2).setBackground('#D9EBD3');
             }
             break;
-          } else if ((j == nround) && (nbrackets == 1) && (options[6][1] == 'third')) {
+          } else if ((j == nround) && (options[6][1] == 'third')) {
             match = bracket.getRange(4 + 1.5*space, 2*j, 2, 2).getValues();
             if ((match[0][0] == mostRecent[0]) && (match[1][0] == mostRecent[2])) {
               var topwins = Number(match[0][1]) + Number(mostRecent[1]);
@@ -910,11 +1072,11 @@ function updateSingleBracket(num, name) {
   }
   
   if (found && !empty) {
-    sendResultToDiscord(name, 'Bracket', bracket.getSheetId());
     var results = sheet.getSheetByName('Results');
     var resultsLength = results.getDataRange().getNumRows();
     results.getRange(resultsLength, 7).setValue(name);
     results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(loc);
+    sendResultToDiscord(name, 'Bracket', bracket.getSheetId());
   }
   
   return found;
@@ -926,6 +1088,7 @@ function reseed(num, name, round) {
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
   var nplayers = Number(options[2][1]);
   var nbrackets = Number(options[8][1]);
+  if (nbrackets > 1) {options[6][1] = 'none';}
   var nround = Math.ceil(Math.log(nplayers/nbrackets)/Math.log(2));
   var bracketSize = 2**(nround + 1);
   var byes = nbrackets*(2**nround) - nplayers;
@@ -947,7 +1110,6 @@ function reseed(num, name, round) {
       bracket.getRange(nbrackets*bracketSize-2-4*i, 2, 2, 2).setBorder(false, false, false, false, null, null);
       bracket.getRange(4+8*i, 3, 1, 2).setValues([[allSeeds[i], "=index('" + options[1][1] + "'!B:B," + (allSeeds[i]+1) + ")"]]);
     }
-    Logger.log(allSeeds);
     for (let i=byes; i<nmatches; i++) {
       bracket.getRange(2+4*(i-byes), 1, 2, 2).setValues([[allSeeds[i], "=index('" + options[1][1] + "'!B:B," + (allSeeds[i]+1) + ")"],
       [allSeeds[2*nmatches-i-1], "=index('" + options[1][1] + "'!B:B," + (allSeeds[2*nmatches-i-1]+1) + ")"]]);
@@ -958,24 +1120,42 @@ function reseed(num, name, round) {
     if (winners.length != Number(winnerInfo[1])) {
       return;
     }
-    let playerList = sheet.getSheetByName(options[1][1]).getRange(2,2,nplayers,1).getValues().flat()
+    let playerList = sheet.getSheetByName(options[1][1]).getRange(2,2,nplayers,1).getValues().flat();
     if ((round == 2) && (byes > 0)) {
       winners = winners.concat(playerList.slice(0,byes));
     }
+    playerList.push('BYE');
     let nmatches = nbrackets*(2**(nround-round));
     let seedList = winners.map(pl => [playerList.indexOf(pl) + 1, pl]);
     seedList.sort((a,b) => a[0] - b[0]);
     switch (seedMethod) {
       case 'random':
         shuffle(seedList);
+        seedList = seedList.map(s => ['', s[1]]);
         break;
       case 'tennis':
         shuffle(seedList, nmatches)
         break;
     }
     let space = 2**round;
+    let nextWinList = [];
     for (let i=0; i<nmatches; i++) {
-      bracket.getRange(space + 2*i*space, 2*round-1, 2, 2).setValues([seedList[i], seedList[2*nmatches-i-1]])
+      if (seedList[i][1] == 'BYE') {
+        bracket.getRange(space + 2*i*space, 2*round-1, 2, 2).setValues([['',' '], seedList[2*nmatches-i-1]]);
+        bracket.getRange(space + 2*i*space, 2*round).setFontLine('line-through');
+        bracket.getRange(space + 2*i*space + 1, 2*round, 1, 2).setBackground('#D9EBD3');
+        nextWinList.push(seedList[2*nmatches-i-1][1]);
+      } else if (seedList[2*nmatches-i-1][1] == 'BYE') {
+        bracket.getRange(space + 2*i*space, 2*round-1, 2, 2).setValues([seedList[i], ['', ' ']]);
+        bracket.getRange(space + 2*i*space, 2*round, 1, 2).setBackground('#D9EBD3');
+        bracket.getRange(space + 2*i*space + 1, 2*round).setFontLine('line-through');
+        nextWinList.push(seedList[i][1]);
+      } else {
+        bracket.getRange(space + 2*i*space, 2*round-1, 2, 2).setValues([seedList[i], seedList[2*nmatches-i-1]]);
+      }
+    }
+    if (nextWinList.length) {
+      bracket.getRange(1, 2*round).setValue("~" + nextWinList.join("~~") + "~");
     }
   }
 }
@@ -989,6 +1169,7 @@ function removeSingleBracket(num, name, row) {
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
   var nplayers = Number(options[2][1]);
   var nbrackets = Number(options[8][1]);
+  if (nbrackets > 1) {options[6][1] = 'none';}
   var nround = Math.ceil(Math.log(nplayers/nbrackets)/Math.log(2));
   var bracketSize = 2**(nround + 1);
   
@@ -1034,7 +1215,7 @@ function removeSingleBracket(num, name, row) {
       } else {
         toScrub.push(bracket.getRange(loc[0]*bracketSize + space + 2*space*loc[2] + ((loc[2]%2) ? 1-space : space),2*loc[1] + 2));
       }
-      if ((loc[1] == nround-1) && (nbrackets == 1) && (options[6][1] == 'third')) {
+      if ((loc[1] == nround-1) && (options[6][1] == 'third')) {
         if (bracket.getRange(4 + 3*space, 2*nround+1).getValue() !== '') {
           SpreadsheetApp.getUi().alert('Removal Failure (Single Elimination): The third place match has a result');
           return false;
@@ -1078,20 +1259,296 @@ function removeSingleBracket(num, name, row) {
   return true;
 }
 
+function dropSingleBracket(num, name, player) {
+  var ui = SpreadsheetApp.getUi()
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var bracket = sheet.getSheetByName(name + ' Bracket');
+  var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var nplayers = Number(options[2][1]);
+  var nbrackets = Number(options[8][1]);
+  if (nbrackets > 1) {options[6][1] = 'none';}
+  var nround = Math.ceil(Math.log(nplayers/nbrackets)/Math.log(2));
+  var bracketSize = 2**(nround + 1);
+  var found = false;
+
+  for (let b=0; b<nbrackets; b++) {
+    for (let j=nround; j>0; j--) {
+      let nmatches = 2**(nround-j);
+      let space = 2**j;
+      for (let i=0; i<nmatches; i++) {
+        if ((bracket.getRange(b*bracketSize + space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).getValue() === '') || (j == nround) || options[5][1]) {
+          let match = bracket.getRange(b*bracketSize + space + 2*i*space, 2*j, 2, 2).getValues();
+          if ((match[0][0] == player) || (match[1][0] == player)) {
+            found = true;
+            let top = (match[0][0] == player);
+            let previous = null;
+            let replace = false;
+            if (options[5][1] && !(j == nround)) {
+              let winList = bracket.getRange(1, 2*j).getValue();
+              winList = winList ? winList.slice(1,-1).split("~~") : [];
+              let pindex = winList.indexOf(player);
+              let opp = match[top ? 1 : 0][0];
+              if (pindex >= 0) {
+                replace = (ui.alert("In the " + name + " Stage, would you like their previous opponent (" + opp + ") to advance in their place?", ui.ButtonSet.YES_NO) == ui.Button.YES);
+                winList.splice(pindex, 1, replace ? opp : 'BYE');
+              } else if (!winList.includes(opp)) {
+                winList.push(opp);
+              }
+              bracket.getRange(1, 2*j).setValue("~" + winList.join("~~") + "~");
+              if ((pindex < 0) || replace) {
+                bracket.getRange(b*bracketSize + space + 2*i*space, 2*j, 2, 2).setBackground(null);
+                bracket.getRange(b*bracketSize + space + 2*i*space + (top ? 1 : 0), 2*j, 1, 2).setBackground('#D9EBD3');
+              }
+              bracket.getRange(b*bracketSize + space + 2*i*space + (top ? 0 : 1), 2*j).setFontLine('line-through');
+              if (options[6][1] == 'third') {
+                bracket.getRange(4 + 3*space + i, 2*j+2).setFontLine('line-through').setValue(' ');
+                bracket.getRange(4 + 3*space + 1 - i, 2*j+2, 1, 2).setBackground('#D9EBD3');
+                if (options[7][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  places.getRange(4, 2, 2, 1).setValues([['=indirect("' + name + ' Bracket!R' + (4 + 3*space + 1 - i) + 'C' + (2*j+2) + '", false)'], [player]]);
+                  places.getRange(5,2).setFontLine('line-through');
+                }
+              } else if (options[7][1]) {
+                let places = sheet.getSheetByName(name + ' Places');
+                if (replace) {
+                  let placeList = places.getRange("B2:B").getValues().flat();
+                  for (let k = placeList.length-1; k>=0; k--) {
+                    if (placeList[k] == opp) {
+                      places.getRange(k+2, 2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                } else if (pindex < 0) {
+                  let fillLength = nbrackets*nmatches;
+                  let tofill = places.getRange(fillLength+2,2,fillLength,1).getValues().flat();
+                  for (let k=fillLength-1; k>=0; k--) {
+                    if (!tofill[k] && (fillLength+k < nplayers)) {
+                      places.getRange(fillLength+2+k,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                } else {
+                  let fillLength = nbrackets*nmatches/2;
+                  let tofill = places.getRange(fillLength+2,2,fillLength,1).getValues().flat();
+                  for (let k=fillLength-1; k>=0; k--) {
+                    if (!tofill[k] && (fillLength+k < nplayers)) {
+                      places.getRange(fillLength+2+k,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+              }
+              reseed(num, name, j+1);
+            } else {
+              if (j != 1) {
+                previous = bracket.getRange(b*bracketSize + space + 2*i*space + (top ? -1 : 1)*space/2, 2*j-2, 2, 1).getValues().flat();
+                if (previous[0].trim()) {
+                  replace = (ui.alert("In the " + name + " Stage, would you like their previous opponent (" + previous[(previous[0] == player) ? 1 : 0] + ") to advance in their place?", ui.ButtonSet.YES_NO) == ui.Button.YES);
+                }
+              }
+              if (replace) {
+                if (previous[0] == player) {
+                  bracket.getRange(b*bracketSize + space + 2*i*space + (top ? -1 : 1)*space/2, 2*j-2).setFontLine('line-through');
+                  bracket.getRange(b*bracketSize + space + 2*i*space + (top ? 0 : 1), 2*j).setValue(previous[1]);
+                  if (options[7][1]) {
+                    let places = sheet.getSheetByName(name + ' Places');
+                    let placeList = places.getRange("B2:B").getValues().flat();
+                    for (let k = placeList.length-1; k>=0; k--) {
+                      if (placeList[k] == previous[1]) {
+                        places.getRange(k+2, 2).setFontLine('line-through').setValue(player);
+                        break;
+                      }
+                    }
+                  }
+                } else {
+                  bracket.getRange(b*bracketSize + space + 2*i*space + (top ? -1 : 1)*space/2 + 1, 2*j-2).setFontLine('line-through');
+                  bracket.getRange(b*bracketSize + space + 2*i*space + (top ? 0 : 1), 2*j).setValue(previous[0]);
+                  if (options[7][1]) {
+                    let places = sheet.getSheetByName(name + ' Places');
+                    let placeList = places.getRange("B2:B").getValues().flat();
+                    for (let k = placeList.length-1; k>=0; k--) {
+                      if (placeList[k] == previous[0]) {
+                        places.getRange(k+2, 2).setFontLine('line-through').setValue(player);
+                        break;
+                      }
+                    }
+                  }
+                }
+                if ((j == nround) && (options[6][1] == 'third')) {
+                  let thirdmatch = bracket.getRange(4 + 1.5*space, 2*j, 2, 1).getValues().flat();
+                  if (previous.includes(thirdmatch[0])) {
+                    bracket.getRange(4 + 1.5*space, 2*j).setFontLine('line-through').setValue(' ');
+                    bracket.getRange(4 + 1.5*space + 1, 2*j, 1, 2).setBackground('#D9EBD3');
+                  } else {
+                    bracket.getRange(4 + 1.5*space + 1, 2*j).setFontLine('line-through').setValue(' ');
+                    bracket.getRange(4 + 1.5*space, 2*j, 1, 2).setBackground('#D9EBD3');
+                  }
+                }
+              } else {
+                bracket.getRange(b*bracketSize + space + 2*i*space + (top ? 0 : 1), 2*j).setFontLine('line-through');
+                bracket.getRange(b*bracketSize + space + 2*i*space + (top ? 1 : 0), 2*j, 1, 2).setBackground('#D9EBD3');
+                if (j != nround) {
+                  bracket.getRange(b*bracketSize + space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue('=indirect("R' + (b*bracketSize + space + 2*i*space + (top ? 1 : 0)) +  'C' + (2*j) + '", false)');
+                  if ((j == nround - 1) && (options[6][1] == 'third')) {
+                    bracket.getRange(4 + 3*space + i, 2*j+2).setFontLine('line-through').setValue(' ');
+                    bracket.getRange(4 + 3*space + 1 - i, 2*j+2, 1, 2).setBackground('#D9EBD3');
+                    if (options[7][1]) {
+                      let places = sheet.getSheetByName(name + ' Places');
+                      places.getRange(4, 2, 2, 1).setValues([['=indirect("' + name + ' Bracket!R' + (4 + 3*space + 1 - i) + 'C' + (2*j+2) + '", false)'], [player]]);
+                      places.getRange(5,2).setFontLine('line-through');
+                    }
+                  } else if (options[7][1]) {
+                    let places = sheet.getSheetByName(name + ' Places');
+                    let fillLength = nbrackets*nmatches;
+                    let tofill = places.getRange(fillLength+2,2,fillLength,1).getValues().flat();
+                    for (let k=fillLength-1; k>=0; k--) {
+                      if (!tofill[k] && (fillLength+k < nplayers)) {
+                        places.getRange(fillLength+2+k,2).setFontLine('line-through').setValue(player);
+                        break;
+                      }
+                    }
+                  }
+                } else if (options[7][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  let tofill = places.getRange(2,2,nbrackets,1).getValues().flat();
+                  for (let k=0; k<nbrackets; k++) {
+                    if (!tofill[k]) {
+                      places.getRange(2+k,2).setValue('=indirect("' + name + ' Bracket!R' + (b*bracketSize + space + 2*i*space + (top ? 1 : 0)) + 'C' + (2*j) + '", false)');
+                      break;
+                    }
+                  }
+                  tofill = places.getRange(nbrackets+2,2,nbrackets,1).getValues().flat();
+                  for (let k=nbrackets-1; k>=0; k--) {
+                    if (!tofill[k]) {
+                      places.getRange(nbrackets+2+k,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            break;
+          } else if ((j == nround) && (options[6][1] == 'third')) {
+            match = bracket.getRange(4 + 1.5*space, 2*j, 2, 2).getValues();
+            if ((match[0][0] == player) || (match[1][0] == player)) {
+              found = true;
+              let top = (match[0][0] == player);
+              bracket.getRange(4 + 1.5*space + (top ? 0 : 1), 2*j).setFontLine('line-through');
+              bracket.getRange(4 + 1.5*space + (top ? 1 : 0), 2*j, 1, 2).setBackground('#D9EBD3');
+              if (options[7][1]) {
+                let places = sheet.getSheetByName(name + ' Places');
+                places.getRange(4, 2, 2, 1).setValues([['=indirect("' + name + ' Bracket!R' + (4 + 1.5*space + (top ? 1 : 0)) + 'C' + (2*j) + '", false)'], [player]]);
+                places.getRange(5,2).setFontLine('line-through');
+              }
+              break;
+            }
+          }
+        }
+      }
+      if (found) {break;}
+    }
+    if (found) {break;}
+  }
+}
+
+function tiebreakPlaces(num, name, players) {
+  var ui = SpreadsheetApp.getUi();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var places = sheet.getSheetByName(name + ' Places');
+  if (!places) {
+    return false;
+  }
+
+  var placeList = places.getRange("A2:B").getValues();
+  var placeLength = placeList.length;
+  var tiedPlayers = [];
+  var tiedStart = null;
+  var incomplete = false;
+  for (let i=0; i<placeLength; i++) {
+    if (!placeList[i][1]) {
+      continue;
+    } else if (players.includes(placeList[i][1])) {
+      tiedPlayers.push(placeList[i][1]);
+      tiedStart = i;
+      let j = 0;
+      while ((i-j >= 0) && !placeList[i-j][0]) {
+        j += 1;
+        tiedPlayers.unshift(placeList[i-j][1]);
+        if (!placeList[i-j][1]) {
+          incomplete = true;
+        }
+        tiedStart = i-j;
+      }
+      j = 1;
+      while ((i+j < placeLength) && !placeList[i+j][0]) {
+        tiedPlayers.push(placeList[i+j][1]);
+        if (!placeList[i+j][1]) {
+          incomplete = true;
+        }
+        j += 1;
+      }
+      if (tiedPlayers.length == 1) {
+        if (players.length == 1) {
+          ui.alert("The player entered was found in the " + name + " Stage but was not in a tie.", ui.ButtonSet.OK);
+        } else {
+          ui.alert("At least one listed player was found in the " + name + " Stage but was not in a tie.", ui.ButtonSet.OK);
+        }
+        return false;
+      }
+      for (p of players) {
+        if (!tiedPlayers.includes(p)) {
+          ui.alert("At least one player was found in a tie in the " + name + " Stage but not all listed players were in the same tie.", ui.ButtonSet.OK);
+          return false;
+        }
+      }
+      break;
+    }
+  }
+  if (!tiedPlayers.length) {
+    return false;
+  }
+  if (incomplete) {
+    let response = ui.alert("A tie was found with the listed player(s) in the " + name + " Stage but not all of the players who will be in that tie are known.", "Would you still like to apply the tiebreaker there?", ui.ButtonSet.YES_NO);
+    if (response != ui.Button.YES) {
+      return false;
+    }
+  }
+
+  tiedPlayers.sort((a,b) => {
+    if (!a) {
+      return 1;
+    } else if (!b) {
+      return -1;
+    } else {
+      return 0;
+    }
+  })
+  for (let i=tiedPlayers.length-1; i>=0; i--) {
+    if (players.includes(tiedPlayers[i])) {
+      tiedPlayers.splice(i, 1);
+    }
+  }
+  tiedPlayers = players.concat(tiedPlayers).map(x => [x]);
+  places.getRange(tiedStart + 2, 2, tiedPlayers.length, 1).setValues(tiedPlayers);
+  ui.alert("Tiebreaker applied in the " + name + " Stage.", ui.ButtonSet.OK);
+  return true;
+}
+
 // Double
 
 function doubleBracketOptions(num, name) {
   var options = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Options');
   const base = 10*num;
 
-  options.getRange(base + 1,1,7,2).setValues([
+  options.getRange(base + 1,1,11,2).setValues([
     ["''" + name + "' Double Elimination Options", ""],
     ["Seeding Sheet", ""],
     ["Number of Players", ""],
     ["Games to Win", ""],
     ["Seeding Method", "standard"],
     ["Finals", "standard"],
-    ["Places Sheet", ""]
+    ["Places Sheet", ""],
+    ["",""],["",""],["",""],["",""]
   ]);
 
   options.getRange(base + 5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'random', 'tennis'],true).build());
@@ -1100,12 +1557,19 @@ function doubleBracketOptions(num, name) {
 }
 
 function createDoubleBracket(num, name) {
+  var ui = SpreadsheetApp.getUi();
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
-  var nround = Math.ceil(Math.log(options[2][1])/Math.log(2));
-  var nlround = 2*nround - 2 - (2**nround-options[2][1]>=2**(nround-2));
+  var nplayers = Number(options[2][1]);
+  if (nplayers < 3) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "The number of players must be at least 3.", ui.ButtonSet.OK);
+    return false;
+  }
+  var nround = Math.ceil(Math.log(nplayers)/Math.log(2));
+  var nlround = 2*nround - 2 - (2**nround-nplayers>=2**(nround-2));
   var width = Math.max(2*nround + 5, 2*nlround + 1)
   var bracket = sheet.insertSheet(name + ' Bracket');
+  bracket.protect().setWarningOnly(true);
   bracket.deleteRows(2, 999);
   bracket.insertRows(1, 2**(nround+1) + ((nlround % 2) ? 4 * 2**((nlround-1)/2) : 3 * 2**(nlround/2)));
   bracket.deleteColumns(2, 25);
@@ -1138,14 +1602,14 @@ function createDoubleBracket(num, name) {
   }
   
   //seed numbers and players
-  var seedList = Array.from({length: options[2][1]}, (v, i) => (i+1));
+  var seedList = Array.from({length: nplayers}, (v, i) => (i+1));
   var seedMethod = options[4][1];
   switch (seedMethod) {
     case 'random':
       shuffle(seedList);
       break;
     case 'tennis':
-      let lastWithBye = 2**nround - options[2][1];
+      let lastWithBye = 2**nround - nplayers;
       let splitRound = lastWithBye ? Math.ceil(Math.log(lastWithBye)/Math.log(2)) : -1;
       shuffle(seedList, 2**(nround-1));      
       for (let i=nround-1; i>1; i--) {
@@ -1160,7 +1624,7 @@ function createDoubleBracket(num, name) {
   }
   
   function placeSeeds(seed, location, roundsLeft) {    
-    if (2**nround + 1 - seed <= Number(options[2][1])) {
+    if (2**nround + 1 - seed <= nplayers) {
       if (seedMethod != 'random') {bracket.getRange(location, 1).setValue(seedList[seed-1]);}
       bracket.getRange(location, 2).setFormula("=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[seed-1] + 1) + ")");
       if (seedMethod != 'random') {bracket.getRange(location + 1, 1).setValue(seedList[2**nround - seed]);}
@@ -1207,7 +1671,7 @@ function createDoubleBracket(num, name) {
         if (nshapes == 1) {bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+6).setFontColor('#b7b7b7').setHorizontalAlignment('right').setValue('Match LF');}
       }
     }
-    let searchRange = bracket.getRange('B1:B' + 2**(nround+1)).getValues();
+    let searchRange = bracket.getRange('B1:B' + 2**(nround+1)).getFormulas();
     let nmatches = 2**(nround-2)
     for (let i=nmatches; i>0; i--) {
       if (searchRange[8*i-3][0]) {
@@ -1230,7 +1694,7 @@ function createDoubleBracket(num, name) {
         if (nshapes == 1) {bracket.getRange(ltop + topShape + i*spacing, 4*j+4).setFontColor('#b7b7b7').setHorizontalAlignment('right').setValue('Match LF');}
       }
     }
-    let searchRange = bracket.getRange('B1:B' + 2**(nround+1)).getValues();
+    let searchRange = bracket.getRange('B1:B' + 2**(nround+1)).getFormulas();
     for (let i=2**(nround-2); i>0; i--) {
       if (searchRange[8*i-7][0]) {
         bracket.getRange(ltop - 3 + 6*i, 1, 2, 1).setValues([['L 1|' + (2*i-1)],['L 1|' + (2*i)]]);
@@ -1244,6 +1708,7 @@ function createDoubleBracket(num, name) {
   //places sheet if desired
   if (options[6][1]) {
     var places = sheet.insertSheet(name + ' Places');
+    places.protect().setWarningOnly(true);
     places.deleteColumns(3,24);
     places.setColumnWidth(1,40);
     places.setColumnWidth(2,150);
@@ -1255,16 +1720,18 @@ function createDoubleBracket(num, name) {
       [3, ''],
       [4, '']
     ]);
-    for (let n=2; n<Number(options[2][1])/2; n*=2) {
+    for (let n=2; n<nplayers/2; n*=2) {
       places.getRange(2+2*n,1).setValue('T' + (1+2*n));
       places.getRange(2+2*n,1,n,1).merge();
-      if (3*n < Number(options[2][1])) {
+      if (3*n < nplayers) {
         places.getRange(2+3*n,1).setValue('T' + (1+3*n));
         places.getRange(2+3*n,1,n,1).merge();
       }
     }
-    places.deleteRows(Number(options[2][1]) + 2, 999-Number(options[2][1]));
+    places.deleteRows(nplayers + 2, 999-nplayers);
   }
+
+  return true;
 }
 
 function updateDoubleBracket(num, name) {
@@ -1275,7 +1742,7 @@ function updateDoubleBracket(num, name) {
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
   var nround = Math.ceil(Math.log(options[2][1])/Math.log(2));
   var nlround = 2*nround - 2 - (2**nround-options[2][1]>=2**(nround-2));
-  var gamesToWin = options[3][1];
+  var gamesToWin = Number(options[3][1]);
   var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   var found = false;
   
@@ -1566,7 +2033,6 @@ function updateDoubleBracket(num, name) {
                   let places = sheet.getSheetByName(name + ' Places');
                   let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
                   for (let k=0; k<tofill.length; k++) {
-                    Logger.log(tofill);
                     if (!tofill[k]) {
                       places.getRange(2+k+2**(nround-1),2).setValue(match[1][0]);
                       break;
@@ -1700,13 +2166,18 @@ function updateDoubleBracket(num, name) {
       }
     }
   }
+
+  var lfloc = [(nlround % 2) ? ltop + 4 * (2**((nlround - 3)/2) - 1) - nlround + 4 : ltop + 3 * (2**((nlround/2) - 1) - 1) - nlround + 3, 2*nlround];
+  if ((bracket.getRange(lfloc[0], lfloc[1]).getFontLine() == 'line-through') && (bracket.getRange(lfloc[0]+1, lfloc[1]).getValue())) {
+    bracket.getRange(ltop-1, 2).setValue('Finals');
+  }
   
   if (found && !empty) {
-    sendResultToDiscord(name, 'Bracket', bracket.getSheetId());
     var results = sheet.getSheetByName('Results');
     var resultsLength = results.getDataRange().getNumRows();
     results.getRange(resultsLength, 7).setValue(name);
-    results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(loc);    
+    results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(loc);
+    sendResultToDiscord(name, 'Bracket', bracket.getSheetId());  
   }
   return found;
 }
@@ -1951,7 +2422,6 @@ function removeDoubleBracket(num, name, row) {
             return false;
           } else {
             bracket.getRange(2**nround+3, 2*nround+2).setValue('');
-            bracket.getRange(ltop-1, 2).setValue('');
           }
         } else {
           if (bracket.getRange(ltop + topShape + loc[2]*spacing + 1 + ((loc[2]%2) ? 1 - spacing/2 : spacing/2), 4*loc[1]+7).getValue() !== '') {
@@ -2006,9 +2476,411 @@ function removeDoubleBracket(num, name, row) {
           }
       }
     }
+    bracket.getRange(ltop-1, 2).setValue('');
   }
   results.getRange(row, 7, 1, 2).setValues([['','removed']]).setFontColor(null);
   return true;
+}
+
+function dropDoubleBracket(num, name, player, blank = false) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var bracket = sheet.getSheetByName(name + ' Bracket');
+  var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var nround = Math.ceil(Math.log(options[2][1])/Math.log(2));
+  var nlround = 2*nround - 2 - (2**nround-options[2][1]>=2**(nround-2));
+  var found = false;
+  
+  var ltop = 2**(nround + 1) + 2;
+  var loserInfo = bracket.getRange(ltop - 1, 1, 1, 2).getValues()[0];
+  
+  if (loserInfo[1]) {
+    //in finals
+    if (options[5][1] != 'grand') {
+      var match = bracket.getRange(2**nround + 2, 2*nround + 4, 2, 2).getValues();
+      if ((match[0][0] == player) || (match[1][0] == player)) {
+        found = true;
+      }
+    }
+    if (found) {
+      if (match[1][0] == player) {
+        bracket.getRange(2**nround + 2, 2*nround + 4, 1, 2).setBackground('#D9EBD3');
+        bracket.getRange(2**nround + 3, 2*nround + 4).setFontLine('line-through');
+        if (options[6][1]) {
+          sheet.getSheetByName(name + ' Places').getRange(2,2,2,1).setValues([['=indirect("R' + (2**nround + 2) + 'C' + (2*nround + 4) + '", false)'],[player]]);
+          places.getRange(3,2).setFontLine('line-through');
+        }
+      } else {
+        bracket.getRange(2**nround + 2, 2*nround + 4).setFontLine('line-through');
+        bracket.getRange(2**nround + 3, 2*nround + 4, 1, 2).setBackground('#D9EBD3');
+        if (options[6][1]) {
+          let places = sheet.getSheetByName(name + ' Places');
+          places.getRange(2,2,2,1).setValues([['=indirect("R' + (2**nround + 3) + 'C' + (2*nround + 4) + '", false)'],[player]]);
+          places.getRange(3,2).setFontLine('line-through');
+        }
+      }
+    } else {
+      var match = bracket.getRange(2**nround + 2, 2*nround + 2, 2, 2).getValues();
+      if (match[0][0] == player) {
+        found = true;
+        bracket.getRange(2**nround + 2, 2*nround + 2).setFontLine('line-through');
+        bracket.getRange(2**nround + 3, 2*nround + 2, 1, 2).setBackground('#D9EBD3');
+        if (options[5][1] != 'grand') {
+          bracket.getRange(2**nround + 2, 2*nround + 4, 2, 1).setValues([[' '], [match[1][0]]]);
+          bracket.getRange(2**nround + 2, 2*nround + 4).setFontLine('line-through');
+          bracket.getRange(2**nround + 3, 2*nround + 4, 1, 2).setBackground('#D9EBD3');
+        }
+        if (options[6][1]) {
+          let places = sheet.getSheetByName(name + ' Places');
+          places.getRange(2,2,2,1).setValues([['=indirect("R' + (2**nround + 3) + 'C' + (2*nround + 2) + '", false)'],[player]]);
+          places.getRange(3,2).setFontLine('line-through');
+        }
+      } else if (match[1][0] == player) {
+        found = true;
+        bracket.getRange(2**nround + 2, 2*nround + 2, 1, 4).setBackground('#D9EBD3');
+        bracket.getRange(2**nround + 3, 2*nround + 2).setFontLine('line-through');
+        if (options[5][1] != 'grand') {
+          bracket.getRange(2**nround + 2, 2*nround + 4).setValue(match[0][0]);
+        }
+        if (options[6][1]) {
+          let places = sheet.getSheetByName(name + ' Places');
+          places.getRange(2,2,2,1).setValues([['=indirect("R' + (2**nround + 2) + 'C' + (2*nround + 2) + '", false)'],[player]]);
+          places.getRange(3,2).setFontLine('line-through');
+        }
+      }
+    }
+  } else if (loserInfo[0].indexOf('~' + player + '~') == -1) {
+    //in winner bracket
+    for (let j=nround; j>0; j--) {
+      let nmatches = 2**(nround-j);
+      let space = 2**j;
+      for (let i=0; i<nmatches; i++) {
+        if ((bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).getValue() === '') || j == nround) {
+          let match = bracket.getRange(space + 2*i*space, 2*j, 2, 2).getValues();
+          if (match[0][0] == player) {
+            found = true;
+            if (j != nround) {
+              bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue('=indirect("R' + (space + 2*i*space + 1) + 'C' + (2*j) + '", false)');
+            } else {
+              bracket.getRange(space + 2*i*space + 2, 2*j+2).setValue('=indirect("R' + (space + 2*i*space + 1) + 'C' + (2*j) + '", false)');
+            }
+            bracket.getRange(space + 2*i*space, 2*j, 1, 2).setFontLine('line-through');
+            bracket.getRange(space + 2*i*space+1, 2*j, 1, 2).setBackground('#D9EBD3');
+            bracket.getRange(ltop - 1, 1).setValue(loserInfo[0] + '~' + match[0][0] + '~');
+            if (nlround % 2) {
+              if (j>2) {
+                bracket.getRange(ltop + 4 * (2**(j-3) - 1) - 2*j + 7 + ((j%2) ? i : -1-i+2**(nround-j))*8*2**(j-3), 4*j-6).setValue(match[0][0]);
+              } else if (j == 2) {
+                if (bracket.getRange(ltop + 4*(nmatches - i) - 3,1).getValue()) {
+                  bracket.getRange(ltop + 4*(nmatches - i) - 3,2).setValue(match[0][0]);
+                } else {
+                  bracket.getRange(ltop + 4*(nmatches - i) - 3 + ((i%2) ? 2 : -1), 4).setValue(match[0][0]);
+                }
+              } else {
+                bracket.getRange(ltop + 2*i, 2).setValue(match[0][0]);
+              }
+            } else {
+              if (j>1) {
+                bracket.getRange(ltop + 3 * (2**(j-2) - 1) - 2*j + 5 + ((j%2) ? i : -1-i+2**(nround-j))*6*2**(j-2), 4*j-4).setValue(match[0][0]);
+              } else {
+                if (i%2) {
+                  if (bracket.getRange(ltop + 1 + 3*i, 1).getValue()) {
+                    bracket.getRange(ltop + 1 + 3*i, 2).setValue(match[0][0]);
+                  } else {
+                    bracket.getRange(ltop - 1 + 3*i, 4).setValue(match[0][0]);
+                  }
+                } else {
+                  bracket.getRange(ltop + 3 + 3*i, 2).setValue(match[0][0]);
+                }
+              }
+            }
+            break;
+          } else if (match[1][0] == player) {
+            found = true;
+            if (j != nround) {
+              bracket.getRange(space + 2*i*space + ((i%2) ? 1-space : space), 2*j+2).setValue('=indirect("R' + (space + 2*i*space) + 'C' + (2*j) + '", false)');
+            } else {
+              bracket.getRange(space + 2*i*space + 2, 2*j+2).setValue('=indirect("R' + (space + 2*i*space) + 'C' + (2*j) + '", false)');
+            }
+            bracket.getRange(space + 2*i*space, 2*j, 1, 2).setBackground('#D9EBD3');
+            bracket.getRange(space + 2*i*space + 1, 2*j).setFontLine('line-through');
+            bracket.getRange(ltop - 1, 1).setValue(loserInfo[0] + '~' + match[1][0] + '~');
+            if (nlround % 2) {
+              if (j>2) {
+                bracket.getRange(ltop + 4 * (2**(j-3) - 1) - 2*j + 7 + ((j%2) ? i : -1-i+nmatches)*8*2**(j-3), 4*j-6).setValue(match[1][0]);
+              } else if (j == 2) {
+                if (bracket.getRange(ltop + 4*(nmatches - i) - 3,1).getValue()) {
+                  bracket.getRange(ltop + 4*(nmatches - i) - 3,2).setValue(match[1][0]);
+                } else {
+                  bracket.getRange(ltop + 4*(nmatches - i) - 3 + ((i%2) ? 2 : -1), 4).setValue(match[1][0]);
+                }
+              } else {
+                bracket.getRange(ltop + 2*i, 2).setValue(match[1][0]);
+              }
+            } else {
+              if (j>1) {
+                bracket.getRange(ltop + 3 * (2**(j-2) - 1) - 2*j + 5 + ((j%2) ? i : -1-i+2**(nround-j))*6*2**(j-2), 4*j-4).setValue(match[1][0]);
+              } else {
+                if (i%2) {
+                  if (bracket.getRange(ltop + 1 + 3*i, 1).getValue()) {
+                    bracket.getRange(ltop + 1 + 3*i, 2).setValue(match[1][0]);
+                  } else {
+                    bracket.getRange(ltop - 1 + 3*i, 4).setValue(match[1][0]);
+                  }
+                } else {
+                  bracket.getRange(ltop + 3 + 3*i, 2).setValue(match[1][0]);
+                }
+              }
+            }
+            break;
+          }
+        }
+      }
+      if (found) {break;}
+    }
+    dropDoubleBracket(num, name, player, true);
+  } else {
+    //in loser bracket
+    if (nlround % 2) {
+      for (let j = (nlround-3)/2; j>=0; j--) {
+        let nshapes = 2**((nlround-3)/2 - j);
+        let topShape = 4 * (2**j - 1) - 2*j - 1;
+        let spacing = 8 * 2**j;
+        for (let i=0; i<nshapes; i++) {
+          if (bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).getValue() === '') {
+            let match = bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+6, 2, 2).getValues();
+            if ((match[0][0] == player) || (match[1][0] == player)) {
+              found = true;
+            }
+            if (found) {
+              if (match[1][0] == player) {
+                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+6, 1, 2).setBackground('#D9EBD3');
+                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setFontLine('line-through');
+                if (blank) {bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue(' ');}
+                if (j == (nlround-3)/2) {
+                  bracket.getRange(2**nround+3, 2*nround+2).setValue('=indirect("R' + (ltop + topShape + i*spacing + 2) + 'C' + (4*j+6) + '", false)');
+                  if (match[0][0]) {bracket.getRange(ltop-1, 2).setValue('Finals');}
+                } else {
+                  bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).setValue('=indirect("R' + (ltop + topShape + i*spacing + 2) + 'C' + (4*j+6) + '", false)');
+                }
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
+                  for (let k=nshapes-1; k>=0; k--) {
+                    if(!tofill[k]) {
+                      places.getRange(2+k+2*nshapes,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+              } else {
+                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+6).setFontLine('line-through');
+                if (blank) {bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+6).setValue(' ');}
+                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6, 1, 2).setBackground('#D9EBD3');
+                if (j == (nlround-3)/2) {
+                  bracket.getRange(2**nround+3, 2*nround+2).setValue('=indirect("R' + (ltop + topShape + i*spacing + 3) + 'C' + (4*j+6) + '", false)');
+                  if (match[1][0]) {bracket.getRange(ltop-1, 2).setValue('Finals');}
+                } else {
+                  bracket.getRange(ltop + topShape + i*spacing + 2 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+8).setValue('=indirect("R' + (ltop + topShape + i*spacing + 3) + 'C' + (4*j+6) + '", false)');
+                }
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
+                  for (let k=nshapes-1; k>=0; k--) {
+                    if(!tofill[k]) {
+                      places.getRange(2+k+2*nshapes,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+              }
+              break;
+            } else if (bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).getValue() === '') {
+              match = bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4, 2, 2).getValues();
+              if (match[0][0] == player) {
+                found = true;
+                bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4).setFontLine('line-through');
+                if (blank) {bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4).setValue(' ');}
+                bracket.getRange(ltop + topShape + i*spacing + 5, 4*j+4, 1, 2).setBackground('#D9EBD3');
+                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue('=indirect("R' + (ltop + topShape + i*spacing + 5) + 'C' + (4*j+4) + '", false)');
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  for (let k=nshapes-1; k>=0; k--) {
+                    if(!tofill[k]) {
+                      places.getRange(2+k+3*nshapes,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+                break;
+              } else if (match[1][0] == player) {
+                found = true;
+                bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+4, 1, 2).setBackground('#D9EBD3');
+                bracket.getRange(ltop + topShape + i*spacing + 5, 4*j+4).setFontLine('line-through');
+                if (blank) {bracket.getRange(ltop + topShape + i*spacing + 5, 4*j+4).setValue(' ');}
+                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+6).setValue('=indirect("R' + (ltop + topShape + i*spacing + 4) + 'C' + (4*j+4) + '", false)');
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  for (let k=nshapes-1; k>=0; k--) {
+                    if(!tofill[k]) {
+                      places.getRange(2+k+3*nshapes,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+                break;
+              }
+            }
+          }
+        }
+        if (found) {break;}
+      }
+      if (!found) {
+        for (let i=2**(nround-2); i>0; i--) {
+          if (bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).getValue() === '') {
+            let match = bracket.getRange(ltop + 4*i - 3, 2, 2, 2).getValues();
+            if (match[0][0] == player) {
+              found = true;
+              bracket.getRange(ltop + 4*i - 3, 2).setFontLine('line-through');
+              if (blank) {bracket.getRange(ltop + 4*i - 3, 2).setValue(' ');}
+              bracket.getRange(ltop + 4*i - 2, 2, 1, 2).setBackground('#D9EBD3');
+              bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).setValue('=indirect("R' + (ltop + 4*i - 2) + 'C2", false)');
+              if (options[6][1]) {
+                let places = sheet.getSheetByName(name + ' Places');
+                let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
+                for (let k=tofill.length-1; k>=0; k--) {
+                  if (!tofill[k]) {
+                    places.getRange(2+k+2**(nround-1),2).setFontLine('line-through').setValue(player);
+                    break;
+                  }
+                }
+              }
+              break;
+            } else if (match[1][0] == player) {
+              found = true;
+              bracket.getRange(ltop + 4*i - 3, 2, 1, 2).setBackground('#D9EBD3');
+              bracket.getRange(ltop + 4*i - 2, 2).setFontLine('line-through');
+              if (blank) {bracket.getRange(ltop + 4*i - 2, 2).setValue(' ');}
+              bracket.getRange(ltop + 4*i - 3 + ((i%2) ? 2 : -1), 4).setValue(match[0][0]);
+              if (options[6][1]) {
+                let places = sheet.getSheetByName(name + ' Places');
+                let tofill = places.getRange(2+2**(nround-1),2,2**(nround-2),1).getValues().flat();
+                for (let k=tofill.length-1; k>=0; k--) {
+                  if (!tofill[k]) {
+                    places.getRange(2+k+2**(nround-1),2).setFontLine('line-through').setValue(player);
+                    break;
+                  }
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
+    } else {
+      for (let j = (nlround/2) - 1; j>=0; j--) {
+        let nshapes = 2**((nlround/2)-j-1);
+        let topShape = 3 * (2**j - 1) - 2*j;
+        let spacing = 6 * 2**j;
+        for (let i=0; i<nshapes; i++) {
+          if (bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).getValue() === '') {
+            let match = bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+4, 2, 2).getValues();
+            if ((match[0][0] == player) || (match[1][0] == player)) {
+              found = true;
+            }
+            if (found) {
+              if (match[1][0] == player) {
+                bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+4, 1, 2).setBackground('#D9EBD3');
+                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setFontLine('line-through');
+                if (blank) {bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setValue(' ');}
+                if (j == (nlround/2) - 1) {
+                  bracket.getRange(2**nround+3, 2*nround+2).setValue('=indirect("R' + (ltop + topShape + i*spacing + 1) + 'C' + (4*j+4) + '", false)');
+                  if (match[0][0]) {bracket.getRange(ltop-1, 2).setValue('Finals');}
+                } else {
+                  bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).setValue('=indirect("R' + (ltop + topShape + i*spacing + 1) + 'C' + (4*j+4) + '", false)');
+                }
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
+                  for (let k=nshapes-1; k>=0; k--) {
+                    if(!tofill[k]) {
+                      places.getRange(2+k+2*nshapes,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+              } else {
+                bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+4).setFontLine('line-through');
+                if (blank) {bracket.getRange(ltop + topShape + i*spacing + 1, 4*j+4).setValue(' ');}
+                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4, 1, 2).setBackground('#D9EBD3');
+                if (j == (nlround/2) - 1) {
+                  bracket.getRange(2**nround+3, 2*nround+2).setValue('=indirect("R' + (ltop + topShape + i*spacing + 2) + 'C' + (4*j+4) + '", false)');
+                  if (match[1][0]) {bracket.getRange(ltop-1, 2).setValue('Finals');}
+                } else {
+                  bracket.getRange(ltop + topShape + i*spacing + 1 + ((i%2) ? 1 - spacing/2 : spacing/2), 4*j+6).setValue('=indirect("R' + (ltop + topShape + i*spacing + 2) + 'C' + (4*j+4) + '", false)');
+                }
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  let tofill = places.getRange(2+2*nshapes,2,nshapes,1).getValues().flat();
+                  for (let k=nshapes-1; k>=0; k--) {
+                    if(!tofill[k]) {
+                      places.getRange(2+k+2*nshapes,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+              }
+              break;
+            } else if (bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).getValue() === '') {
+              match = bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2, 2, 2).getValues();
+              if (match[0][0] == player) {
+                found = true;
+                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2).setFontLine('line-through');
+                if (blank) {bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2).setValue(' ');}
+                bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+2, 1, 2).setBackground('#D9EBD3');
+                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setValue('=indirect("R' + (ltop + topShape + i*spacing + 4) + 'C' + (4*j+2) + '", false)');
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  for (let k=nshapes-1; k>=0; k--) {
+                    if(!tofill[k]) {
+                      places.getRange(2+k+3*nshapes,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+                break;
+              } else if (match[1][0] == player) {
+                found = true;
+                bracket.getRange(ltop + topShape + i*spacing + 3, 4*j+2, 1, 2).setBackground('#D9EBD3');
+                bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+2).setFontLine('line-through');
+                if (blank) {bracket.getRange(ltop + topShape + i*spacing + 4, 4*j+2).setValue(' ');}
+                bracket.getRange(ltop + topShape + i*spacing + 2, 4*j+4).setValue('=indirect("R' + (ltop + topShape + i*spacing + 3) + 'C' + (4*j+2) + '", false)');
+                if (options[6][1]) {
+                  let places = sheet.getSheetByName(name + ' Places');
+                  let tofill = places.getRange(2+3*nshapes,2,nshapes,1).getValues().flat();
+                  for (let k=nshapes-1; k>=0; k--) {
+                    if(!tofill[k]) {
+                      places.getRange(2+k+3*nshapes,2).setFontLine('line-through').setValue(player);
+                      break;
+                    }
+                  }
+                }
+                break;
+              }
+            }
+          }
+        }
+        if (found) {break;}
+      }
+    }
+  }
+
+  var lfloc = [(nlround % 2) ? ltop + 4 * (2**((nlround - 3)/2) - 1) - nlround + 4 : ltop + 3 * (2**((nlround/2) - 1) - 1) - nlround + 3, 2*nlround];
+  if ((bracket.getRange(lfloc[0], lfloc[1]).getFontLine() == 'line-through') && (bracket.getRange(lfloc[0]+1, lfloc[1]).getValue())) {
+    bracket.getRange(ltop-1, 2).setValue('Finals');
+  }
 }
 
 // Swiss
@@ -2017,23 +2889,39 @@ function swissOptions(num, name) {
   var options = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Options');
   const base = 10*num;
 
-  options.getRange(base + 1,1,7,2).setValues([
+  options.getRange(base + 1,1,11,2).setValues([
     ["''" + name + "' Swiss Options", ""],
     ["Seeding Sheet", ""],
     ["Number of Players", ""],
     ["Number of Rounds", ""],
     ["Games per Match", ""],
-    ["Seeding Method", "standard"],
-    ["Bye Result", ""]
+    ["Pairing Method", "standard"],
+    ["Bye Result", ""],
+    ["",""],["",""],["",""],["",""]
   ]);
 
-  options.getRange(base + 6,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'random', 'highlow'],true).build());
+  options.getRange(base + 6,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['standard', 'consecutive', 'random', 'highlow'],true).build());
 }
 
 function createSwiss(num, name) {
+  var ui = SpreadsheetApp.getUi();
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var nplayers = Number(options[2][1]);
+  var nrounds = Number(options[3][1]);
+  var gamesPerMatch = Number(options[4][1]);
+  if (nrounds < 1) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "There must be at least 1 round.", ui.ButtonSet.OK);
+    return false;
+  } else if (nplayers-((nplayers%2) ? 0 : 1) < nrounds) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "The number of players is too small for the number of rounds.", ui.ButtonSet.OK);
+    return false;
+  } else if ((gamesPerMatch < 1) || (gamesPerMatch % 1)) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "Games per Match must be a positive integer.", ui.ButtonSet.OK);
+    return false;
+  }
   var swiss = sheet.insertSheet(name + ' Standings');
+  swiss.protect().setWarningOnly(true);
   swiss.deleteRows(2*Math.ceil(options[2][1]/2) + 1, 1000 - 2*Math.ceil(options[2][1]/2));
   swiss.deleteColumns(10, 17)
   swiss.setColumnWidth(1, 20);
@@ -2051,15 +2939,19 @@ function createSwiss(num, name) {
   swiss.getRange('I:I').setHorizontalAlignment('right');
   swiss.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=ISBLANK(B1)').setFontColor('#FFFFFF').setRanges([swiss.getRange('A:A')]).build()]);
   var processing = sheet.insertSheet(name + ' Processing');
-  processing.getRange('E1').setValue('2');
-  var players = Array.from({length:Number(options[2][1])}, (v,i) => "=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")");
+  processing.protect().setWarningOnly(true);
+  var players = Array.from({length:nplayers}, (v,i) => "=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")");
   
+  //processing sheet
+  processing.getRange(1,1,nplayers, 6).setValues(players.map((p,i) => [p, '', 0, 0, i+1, 1]));
+  processing.getRange('H1').setValue('=query(query(A:F, "select A, sum(C), sum(D), sum(E), sum(F) where not A = \'BYE\' group by A order by sum(F) desc, sum(C) desc, sum(D), sum(E)"), "where Col2+Col3>0")');
+
   //display sheet
   //standings
   var standings = [['Pl', 'Player', 'Wins', 'Losses']];
   for (let i=1; i <= options[2][1]; i++) {
     standings.push(['=if(and(C' + (i+1) + '=C' + i + ', D' + (i+1) + '=D' + i +'), "", ' + i + ')',
-     "='" + name + " Processing'!G" + (i+1), "='" + name + " Processing'!H" + (i+1), "='" + name + " Processing'!I" + (i+1)]);
+     "='" + name + " Processing'!H" + (i+1), "='" + name + " Processing'!I" + (i+1), "='" + name + " Processing'!J" + (i+1)]);
   }
   swiss.getRange(1, 1, standings.length, 4).setValues(standings);
   
@@ -2073,6 +2965,13 @@ function createSwiss(num, name) {
   }
   var halfplayers = players.length/2;
   switch (options[5][1]) {
+    case 'consecutive':
+      let odds = [];
+      for (let i=halfplayers-1; i>=0; i--) {
+        odds.unshift(players.splice(2*i+1,1));
+      }
+      players = players.concat(odds);
+      break;
     case 'random':
       shuffle(players);
       if (byeplace) {byeplace = players.indexOf('BYE');}
@@ -2086,9 +2985,9 @@ function createSwiss(num, name) {
   var byediff = 0;
   if (/^\d+--\d+$/.test(options[6][1])) {
     walkover = options[6][1].split("--");
-    byediff = Number(options[4][1]) - (Number(walkover[0]) + Number(walkover[1]));
+    byediff = gamesPerMatch - (Number(walkover[0]) + Number(walkover[1]));
   }
-  var firstround = [['Round', 1, '=(SUM(G2:H) + I1)/' + (Number(options[4][1]) * halfplayers), 0]];
+  var firstround = [['Round', 1, '=(SUM(G2:H) + I1)/' + (gamesPerMatch * halfplayers), 0]];
   for (let i = 0; i < halfplayers; i++) {
     if (players[i] == 'BYE') {
       firstround.push(['BYE', walkover[1], walkover[0], players[halfplayers+i]]);
@@ -2103,15 +3002,18 @@ function createSwiss(num, name) {
   }
   swiss.getRange(1, 6, firstround.length, 4).setValues(firstround);
   
-  //processing sheet
-  processing.getRange('G1').setValue('=query(A:D, "select A, sum(C), sum(D) where not A = \'BYE\' group by A order by sum(C) desc, sum(D)")');
+  //handle bye on processing sheet
   if(byeplace) {
     let playerToInsert = (byeplace < halfplayers) ? players[halfplayers + byeplace] : players[byeplace - halfplayers];
-    processing.getRange(2, 1, 1, 4).setValues([[playerToInsert, 'BYE', walkover[0], walkover[1]]]);
-    processing.getRange(3, 1, 1, 4).setValues([['BYE', playerToInsert, walkover[1], walkover[0]]]);
-    processing.getRange('E1').setValue(4);
-    processing.getRange('E2').setValue(2);
+    processing.getRange(nplayers + 2, 1, 1, 4).setValues([[playerToInsert, 'BYE', walkover[0], walkover[1]]]);
+    processing.getRange(nplayers + 3, 1, 1, 4).setValues([['BYE', playerToInsert, walkover[1], walkover[0]]]);
+    processing.getRange('G1').setValue(nplayers + 4);
+    processing.getRange('G2').setValue(nplayers + 2);
+  } else {
+    processing.getRange('G1').setValue(nplayers + 2);
   }
+
+  return true;
 }
 
 function updateSwiss(num, name) {
@@ -2120,7 +3022,7 @@ function updateSwiss(num, name) {
   var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse()});
   var swiss = sheet.getSheetByName(name + ' Standings');
   var processing = sheet.getSheetByName(name + ' Processing');
-  var nextOpen = Number(processing.getRange('E1').getValue());
+  var nextOpen = Number(processing.getRange('G1').getValue());
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
   
   //update matches and standings - standings updates only occur if the reported match was in the match list
@@ -2142,16 +3044,16 @@ function updateSwiss(num, name) {
       swiss.getRange(i+2, 7, 1, 2).setValues([[leftwins, rightwins]]);
       if (forceFinish) {
         let fudges = Number(swiss.getRange('I1').getValue());
-        fudges += Number(options[4][1]) - (Number(mostRecent[1]) + Number(mostRecent[3]));
+        fudges += Number(options[4][1]) - (leftwins + rightwins);
         swiss.getRange('I1').setValue(fudges);
       }
       processing.getRange(nextOpen, 1, 2, 4).setValues([[mostRecent[0], mostRecent[2], mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], mostRecent[3], mostRecent[1]]]);
-      processing.getRange('E1').setValue(nextOpen + 2);
-      sendResultToDiscord(name, 'Standings', swiss.getSheetId());
+      processing.getRange('G1').setValue(nextOpen + 2);
       var results = sheet.getSheetByName('Results');
       var resultsLength = results.getDataRange().getNumRows();
       results.getRange(resultsLength, 7).setValue(name);
       results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(swiss.getRange('G1').getValue() + ',' + i + ',' + nextOpen);
+      sendResultToDiscord(name, 'Standings', swiss.getSheetId());
       //make next round's match list if needed
       newSwissRound(num, name);
       break;
@@ -2165,86 +3067,118 @@ function newSwissRound(num, name) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var swiss = sheet.getSheetByName(name + ' Standings');
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var nplayers = Number(options[2][1]);
   var roundInfo = swiss.getRange('G1:H1').getValues()[0];
   
   if ((roundInfo[1] == 1) && (Number(roundInfo[0]) < Number(options[3][1]))) {
-    var players = swiss.getRange(2, 2, options[2][1], 1).getValues().flat();
+    var players = swiss.getRange(2, 1, nplayers, 2).getValues();
     var assigned = [];
     var processing = sheet.getSheetByName(name + ' Processing');
-    var playedMatches = processing.getRange(1,1,processing.getLastRow(),2).getValues();
+    var playedMatchesRaw = processing.getRange(1,1,processing.getLastRow(),6).getValues();
+    var pmlen = playedMatchesRaw.length;
     
-    //trim playedMatches
-    var pmlen = playedMatches.length;
-    for (let i=pmlen-1; i >= 0; i--) {
-      if (!playedMatches[i][0]) {
-        playedMatches.splice(i,1);
-        break;
+    var playedMatches = {'BYE': []}
+    for (let i=0; i<nplayers; i++) {
+      playedMatches[playedMatchesRaw[i][0]] = [];
+      if (playedMatchesRaw[i][5] == 0) {
+        players.pop();
       }
     }
-    pmlen = playedMatches.length;
+
+    for (let i=nplayers+1; i<pmlen; i++) {
+      if (playedMatchesRaw[i][0]) {
+        playedMatches[playedMatchesRaw[i][0]].push(playedMatchesRaw[i][1]);
+      }
+    }    
     
+    nplayers = players.length;
+    var standingsCuts = [];
+    for (let i=1; i<nplayers; i++) {
+      if (players[i][0]) {
+        standingsCuts.push(i);
+      }
+    }
+    standingsCuts.push(nplayers);
+
+    players = players.map(p => p[1]);
     //add potential bye
-    if (players.length % 2) {
-      var byeplace = Math.floor(Math.random() * (options[2][1] + 1));
-      players.splice(byeplace, 0, 'BYE');
-    }
-    
-    var halfplayers = players.length/2;
-    
-    function alreadyPlayed(player) {
-      let playedList = [];
-      for (let i=0; i<pmlen; i++) {
-        if (playedMatches[i][0] == player) {
-          playedList.push(playedMatches[i][1]);
-        }
-      }
-      return playedList;
-    }
+    if (players.length % 2) {players.push('BYE');}
+    nplayers = players.length;
 
-    function searchForNew(player, index) {
-      let played = alreadyPlayed(player);
-
-      for (let i=index; i<2*halfplayers; i++) {
-        if (!played.includes(players[i]) && !assigned.includes(players[i])) {
-          return i;
-        }
+    //make initial assignments
+    if (options[5][1] == 'consecutive') {
+      assigned = players;
+    } else if (options[5][1] == 'random') {
+      assigned = players;
+      standingsCuts.unshift(1);
+      for(let i=standingsCuts.length-2; i>=0; i--) {
+        shuffle(assigned, standingsCuts[i], standingsCuts[i+1]-1);
       }
-      
-      return -1;
-    }
-    
-    for (let i=0; i<2*halfplayers; i++) {
-      if (!assigned.includes(players[i])) {
-        let oppIdx = searchForNew(players[i], i+1);
-        if (oppIdx >= 0) {
-          assigned.push(players[i]);
-          assigned.push(players[oppIdx]);
+    } else {
+      while (standingsCuts.length) {
+        if (standingsCuts[0] % 2) {
+          if (standingsCuts[1] == standingsCuts[0] + 1) {
+            standingsCuts.shift();
+            continue;
+          } else {
+            standingsCuts[0] += 1;
+          }
+        }
+        let filled = assigned.length;
+        let half = (standingsCuts.shift() - filled)/2;
+        if (options[5][1] == 'highlow') {
+          let end = filled + 2*half - 1;
+          for (let i=0; i<half; i++) {
+            if (i % 2) {
+              assigned.push(players[end - i]);
+              assigned.push(players[filled + i]);
+            } else {
+              assigned.push(players[filled + i]);
+              assigned.push(players[end - i]);
+            }
+          }
         } else {
-          let iplayed = alreadyPlayed(players[i]);
-          for(let j=assigned.length - 1; j>=0; j--) {
-            if (!iplayed.includes(assigned[j])) {
-              if (j % 2) {
-                let jNewIdx = searchForNew(assigned[j-1], i+1);
-                if (jNewIdx >= 0) {
-                  assigned.push(assigned[j-1]);
-                  assigned.push(players[jNewIdx]);
-                  assigned[j-1] = players[i];
-                  break;
-                }
-              } else {
-                let jNewIdx = searchForNew(assigned[j+1], i+1);
-                if (jNewIdx >= 0) {
-                  assigned.push(assigned[j+1]);
-                  assigned.push(players[jNewIdx]);
-                  assigned[j+1] = players[i];
-                  break;
-                }
-              }
+          for (let i=filled; i<filled+half; i++) {
+            if (i % 2) {
+              assigned.push(players[half + i]);
+              assigned.push(players[i]);
+            } else {
+              assigned.push(players[i]);
+              assigned.push(players[half + i]);
             }
           }
         }
       }
     }
+    
+    //resolve already played matches - first greedily search down list then non-greedily up
+    for (let i=0; i<nplayers; i+=2) {
+      if (playedMatches[assigned[i]].includes(assigned[i+1])) {
+        let found = false;
+        for (let j=i+2; j<nplayers; j++) {
+          if (!playedMatches[assigned[i]].includes(assigned[j])) {
+            let toswap = assigned[i+1];
+            assigned[i+1] = assigned[j];
+            assigned[j] = toswap;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          for (let j=i-1; j>=0; j--) {
+            if (!playedMatches[assigned[i]].includes(assigned[j]) && !playedMatches[assigned[i+1]].includes(assigned[j + ((j%2) ? -1 : 1)])) {
+              let toswap = assigned[i+1];
+              assigned[i+1] = assigned[j];
+              assigned[j] = toswap;
+              found = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    var halfplayers = nplayers/2;
 
     var walkover = [options[4][1], 0];
     var byediff = 0;
@@ -2270,6 +3204,7 @@ function newSwissRound(num, name) {
     swiss.setColumnWidths(7, 2, 30);
     swiss.setColumnWidth(9, 150);
     swiss.setColumnWidth(10, 100);
+    swiss.getRange('F:J').setFontLine('none');
     swiss.getRange('F1').setHorizontalAlignment('right');
     swiss.getRange('G1').setHorizontalAlignment('left');
     swiss.getRange('H1:I1').setFontColor('#ffffff');
@@ -2277,16 +3212,16 @@ function newSwissRound(num, name) {
     swiss.getRange('J:J').setBackground('#707070');
     swiss.getRange(1, 6, roundMatches.length, 4).setValues(roundMatches);
     
-    if (byeplace) {
-      let byeIdx = assigned.indexOf('BYE');
-      let nextOpen = Number(processing.getRange('E1').getValue());      
+    let byeIdx = assigned.indexOf('BYE');
+    if (byeIdx >= 0) {
+      let nextOpen = Number(processing.getRange('G1').getValue());      
       if (byeIdx % 2) {
         processing.getRange(nextOpen, 1, 2, 4).setValues([[assigned[byeIdx-1],'BYE', walkover[0], walkover[1]],['BYE', assigned[byeIdx-1], walkover[1], walkover[0]]]);
       } else {
         processing.getRange(nextOpen, 1, 2, 4).setValues([[assigned[byeIdx+1],'BYE', walkover[0], walkover[1]],['BYE', assigned[byeIdx+1], walkover[1], walkover[0]]]);
       }
-      processing.getRange('E1').setValue(nextOpen + 2);
-      processing.getRange(Number(roundInfo[0]+2), 5).setValue(nextOpen);
+      processing.getRange('G1').setValue(nextOpen + 2);
+      processing.getRange(Number(roundInfo[0]+2), 7).setValue(nextOpen);
     }
   }
 }
@@ -2314,8 +3249,9 @@ function removeSwiss(num, name, row) {
       }
     }
     swiss.deleteColumns(6, 5);
-    if (options[2][1] % 2) {
-      processing.getRange(processing.getRange(round+1,5).getValue(), 1, 2, 4).setValues([['','','',''],['','','','']]);
+    let byeLoc = processing.getRange(round+1,7).getValue();
+    if (byeLoc) {
+      processing.getRange(byeLoc, 1, 2, 4).setValues([['','','',''],['','','','']]);
     }
   }
   processing.getRange(loc[2], 1, 2, 4).setValues([['','','',''],['','','','']]);
@@ -2337,31 +3273,193 @@ function removeSwiss(num, name, row) {
   return true;
 }
 
+function tiebreakSwiss(num, name, players) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var swiss = sheet.getSheetByName(name + ' Standings');
+  var roundInfo = swiss.getRange('G1:H1').getValues()[0];
+  var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+
+  var ui = SpreadsheetApp.getUi();
+  var tiedPlayers = [];
+  var tiedStart = null;
+
+  var standingsList = swiss.getRange("B2:D").getValues();
+  var standingsLength = standingsList.length;
+  for (let i=0; i<standingsLength; i++) {
+    if (!standingsList[i][0]) {
+      break;
+    }
+    if (players.includes(standingsList[i][0])) {
+      tiedPlayers.push(standingsList[i][0]);
+      tiedStart = i;
+      let j = 1;
+      while ((i-j >= 0) && (standingsList[i-j][1] === standingsList[i][1]) && (standingsList[i-j][2] === standingsList[i][2])) {
+        tiedPlayers.unshift(standingsList[i-j][0]);
+        tiedStart = i-j;
+        j += 1;
+      }
+      j = 1;
+      while ((i+j < standingsLength) && (standingsList[i+j][1] === standingsList[i][1]) && (standingsList[i+j][2] === standingsList[i][2])) {
+        tiedPlayers.push(standingsList[i+j][0]);
+        j += 1;
+      }
+      if (tiedPlayers.length == 1) {
+        if (players.length == 1) {
+          ui.alert("The player entered was found in the " + name + " Stage but was not in a tie.", ui.ButtonSet.OK);
+        } else {
+          ui.alert("At least one listed player was found in the " + name + " Stage but was not in a tie.", ui.ButtonSet.OK);
+        }
+        return false;
+      }
+      for (p of players) {
+        if (!tiedPlayers.includes(p)) {
+          ui.alert("At least one player was found in a tie in the " + name + " Stage but not all listed players were in the same tie.", ui.ButtonSet.OK);
+          return false;
+        }
+      }
+      break;
+    }
+  }
+  if (!tiedPlayers.length) {
+    return false;
+  }
+
+  if ((roundInfo[0] != options[3][1]) || (roundInfo[1] != 1)) {
+    let response = ui.alert("A tie was found with the listed player(s) in the " + name + " Stage but the stage appears to be incomplete.", "If more results are entered it may cause problems. Would you still like to apply the tiebreaker there?", ui.ButtonSet.YES_NO);
+    if (response != ui.Button.YES) {
+      return false;
+    }
+  }
+
+  for (let i=tiedPlayers.length-1; i>=0; i--) {
+    if (players.includes(tiedPlayers[i])) {
+      tiedPlayers.splice(i, 1);
+    }
+  }
+  tiedPlayers = players.concat(tiedPlayers).map((x,i) => [(i <= players.length) ? tiedStart + i + 1 : "", x]);
+  swiss.getRange(tiedStart + 2, 1, tiedPlayers.length, 2).setValues(tiedPlayers);
+  ui.alert("Tiebreaker applied in the " + name + " Stage.", ui.ButtonSet.OK);
+  return true;
+}
+
+function dropSwiss(num, name, player) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var swiss = sheet.getSheetByName(name + ' Standings');
+  var processing = sheet.getSheetByName(name + ' Processing');
+  var nextOpen = Number(processing.getRange('G1').getValue());
+  var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var nplayers = Number(options[2][1]);
+  var walkover = [options[4][1], 0];
+  var byediff = 0;
+  if (/^\d+--\d+$/.test(options[6][1])) {
+    walkover = options[6][1].split("--");
+    byediff = Number(options[4][1]) - (Number(walkover[0]) + Number(walkover[1]));
+  }
+
+  var procList = processing.getRange(1, 1, nplayers, 6).getValues();
+  var ndropped = 0;
+  for (let i=0; i<nplayers; i++) {
+    if (procList[i][5] == 0) {
+      ndropped += 1;
+    } else if (procList[i][0] == player) {
+      processing.getRange(i+1, 6).setValue(0);
+    }
+  }
+  swiss.getRange(nplayers + 1 - ndropped, 2).setFontLine('line-through');
+
+  var roundMatches = swiss.getRange(2, 6, Math.ceil(nplayers/2),4).getValues();
+  var roundOpponent = null;
+  for (let i=0; i<roundMatches.length; i++) {
+    if (roundMatches[i][0] == player) {
+      let gamesPlayed = Number(roundMatches[i][1]) + Number(roundMatches[i][2]);
+      if (gamesPlayed != options[4][1]) {
+        swiss.getRange(2+i,6).setFontLine('line-through');
+        roundOpponent = roundMatches[i][3];
+        if (roundOpponent != 'BYE') {
+          if (gamesPlayed) {
+            let results = sheet.getSheetByName('Results').getDataRange().getValues();
+            for (let r=results.length-1; r>=0; r--) {
+              if ((results[r][6] == name) && (((results[r][1] == player) && (results[r][3] == roundOpponent)) || ((results[r][3] == player) && (results[r][1] == roundOpponent)))) {
+                removeResult(r+1);
+                Utilities.sleep(5000);
+                break;
+              }
+            }
+          }
+          swiss.getRange(2+i, 7, 1, 2).setValues([[walkover[1], walkover[0]]]);
+          let fudges = Number(swiss.getRange('I1').getValue());
+          swiss.getRange('I1').setValue(fudges + byediff);
+        }
+      }
+      break;
+    } else if (roundMatches[i][3] == player) {
+      let gamesPlayed = Number(roundMatches[i][1]) + Number(roundMatches[i][2]);
+      if (gamesPlayed != options[4][1]) {
+        swiss.getRange(2+i,9).setFontLine('line-through');
+        roundOpponent = roundMatches[i][0];
+        if (roundOpponent != 'BYE') {
+          if (gamesPlayed) {
+            let results = sheet.getSheetByName('Results').getDataRange().getValues();
+            for (let r=results.length-1; r>=0; r--) {
+              if ((results[r][6] == name) && (((results[r][1] == player) && (results[r][3] == roundOpponent)) || ((results[r][3] == player) && (results[r][1] == roundOpponent)))) {
+                removeResult(r+1);
+                Utilities.sleep(5000);
+                break;
+              }
+            }
+          }
+          swiss.getRange(2+i, 7, 1, 2).setValues([[walkover[0], walkover[1]]]);
+          let fudges = Number(swiss.getRange('I1').getValue());
+          swiss.getRange('I1').setValue(fudges + byediff);
+        }
+      }
+      break;
+    }
+  }
+  if (roundOpponent) {
+    processing.getRange(nextOpen, 1, 2, 4).setValues([[roundOpponent,'BYE', walkover[0], walkover[1]],['BYE', roundOpponent, walkover[1], walkover[0]]]);
+    processing.getRange("G1").setValue(nextOpen + 2);
+  }
+
+  newSwissRound(num, name);
+}
+
 // Random
 
 function randomOptions(num, name) {
   var options = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Options');
   const base = 10*num;
 
-  options.getRange(base + 1,1,5,2).setValues([
+  options.getRange(base + 1,1,11,2).setValues([
     ["''" + name + "' Preset Random Options", ""],
     ["Seeding Sheet", ""],
     ["Number of Players", ""],
     ["Number of Rounds", ""],
-    ["Games per Match", ""]
+    ["Games per Match", ""],
+    ["",""],["",""],["",""],["",""],["",""],["",""]
   ]);
 }
 
 function createRandom(num, name) {
+  var ui = SpreadsheetApp.getUi();
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
-  var playerNames = sheet.getSheetByName(options[1][1]).getRange("B2:B" + (Number(options[2][1]) + 1)).getValues().flat();
+  var nplayers = Number(options[2][1]);
+  var nrounds = Number(options[3][1]);
+  if ((nrounds < 1) || (nrounds % 1)) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "The number of round must be a positive integer.", ui.ButtonSet.OK);
+    return false;
+  } else if (nplayers-1 < nrounds) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "The number of players is too small for the number of rounds.", ui.ButtonSet.OK);
+    return false;
+  }
   
   //setup matches
   var standings = sheet.insertSheet(name + ' Standings');
-  standings.deleteRows(Number(options[2][1])+2,999-Number(options[2][1]));
+  standings.protect().setWarningOnly(true);
+  standings.deleteRows(nplayers+2,999-nplayers);
   standings.deleteColumns(8, 19);
-  standings.insertColumnsAfter(7, 2*options[3][1]+1)
+  standings.insertColumnsAfter(7, 2*nrounds+1)
   standings.setColumnWidth(1, 20);
   standings.setColumnWidth(2, 150);
   standings.setColumnWidths(3, 4, 50);
@@ -2369,20 +3467,25 @@ function createRandom(num, name) {
   standings.getRange('F:F').setNumberFormat('0.000');
   standings.getRange('G:G').setBackground('#707070');
   standings.setColumnWidth(8, 150);
-  for (let i=0; i<options[3][1]; i++) {
+  for (let i=0; i<nrounds; i++) {
     standings.setColumnWidth(9+2*i, 150);
-    standings.getRange(1, 9+2*i, options[2][1]+1).setBorder(false, true, false, false, null, false);
-    standings.getRange(2, 9+2*i, options[2][1]).setFontColor('#990000');
-    standings.setColumnWidth(10+2*i, 20);
+    standings.getRange(1, 9+2*i, nplayers+1).setBorder(false, true, false, false, null, false);
+    standings.getRange(2, 9+2*i, nplayers).setFontColor('#990000');
+    standings.setColumnWidth(10+2*i, 25);
   }
   standings.setFrozenColumns(7);
   standings.setFrozenRows(1);
   standings.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=ISBLANK(B1)').setFontColor('#FFFFFF').setRanges([standings.getRange('A:A')]).build()]);
-  var players = Array.from({length:Number(options[2][1])}, (v,i) => ["=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")", playerNames[i]]);
-  players.sort((a,b) => lowerSort(a[1], b[1]));
-  players = players.map(x => x[0]);
-
-  if (options[2][1] % 2) {players.push(['OPEN']);}
+  if (options[1][1]) {
+    var playerNames = sheet.getSheetByName(options[1][1]).getRange("B2:B" + (nplayers + 1)).getValues().flat();
+    var players = Array.from({length:nplayers}, (v,i) => ["=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")", playerNames[i]]);
+    players.sort((a,b) => lowerSort(a[1], b[1]));
+    players = players.map(x => x[0]);
+  } else {
+    var players = Array.from({length:nplayers}, (v,i) => "=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")");
+  }
+  
+  if (nplayers % 2) {players.push('OPEN');}
   var pllength = players.length;
   
   var matches = [];
@@ -2393,7 +3496,7 @@ function createRandom(num, name) {
   function matchExists(p1,p2) {
     for (let j=0; j<pllength; j++) {
       if (matches[j][0] == p1) {
-        for (let k=0; k<options[3][1]; k++) {
+        for (let k=0; k<nrounds; k++) {
           if (matches[j][2*k+1] == p2) {
             return true;
           }
@@ -2404,14 +3507,14 @@ function createRandom(num, name) {
   }
   
   //assign matches
-  for (let rnd=0; rnd<options[3][1]; rnd++) {
+  for (let rnd=0; rnd<nrounds; rnd++) {
     let bad = false;
     let potential = [];
     do {
       potential = [];
       bad = false;
       shuffle(players);
-      for (let i=0; i<options[2][1]/2; i++) {
+      for (let i=0; i<nplayers/2; i++) {
         if (rnd) {
           bad = matchExists(players[2*i], players[2*i+1]);
         }
@@ -2433,15 +3536,15 @@ function createRandom(num, name) {
   
   //handle odd number of players
   var byePlayer = null;
-  if (options[2][1] % 2) {
+  if (nplayers % 2) {
     let opens = [];
     for (let i=0; i<pllength; i++) {
       if (matches[i][0] == 'OPEN') {
-        for (let rnd=0; rnd<options[3][1]; rnd++) {
+        for (let rnd=0; rnd<nrounds; rnd++) {
           opens.push(matches[i][rnd*2+1]);
         }
         matches.splice(i,1);
-        pllength--;
+        pllength -= 1;
         break;
       }
     }
@@ -2476,7 +3579,7 @@ function createRandom(num, name) {
                   if (!matchExists(assigned[j+1], opens[k])) {
                     assigned.push(assigned[j+1]);
                     assigned.push(opens[k]);
-                    assigned[j-1] = opens[i];
+                    assigned[j+1] = opens[i];
                     found = true;
                     break;
                   }
@@ -2501,12 +3604,11 @@ function createRandom(num, name) {
       } else {
         for (let j=0; j<pllength; j++) {
           if (matches[j][0] == assigned[i]) {
-            for (let k=0; k<options[3][1]; k++) {
+            for (let k=0; k<nrounds; k++) {
               if (matches[j][2*k+1] == 'OPEN') {
                 let newval = (i % 2) ? assigned[i-1] : assigned[i+1]
                 matches[j][2*k+1] = newval;
                 if (newval == 'BYE') {
-                  matches[j][2*k+2] = options[4][1];
                   standings.getRange(j+2, 9+2*k).setFontColor('#38761d');
                 }
               }
@@ -2520,7 +3622,7 @@ function createRandom(num, name) {
   //put matches on sheet
 
   var topRow = ['Player'];
-  for (let i=0; i<options[3][1]; i++) {
+  for (let i=0; i<nrounds; i++) {
     topRow.push('Opponent ' + (i+1));
     topRow.push('');
   }
@@ -2529,32 +3631,33 @@ function createRandom(num, name) {
   
   //results processing
   var processing = sheet.insertSheet(name + ' Processing');
-  processing.getRange('D1').setValue(1);
-  processing.getRange('E1').setFormula('=query(K:N,"select K,L/M,L,M-L,N where not K = \'BYE\' order by L/M desc, N desc, L desc")');
-  processing.getRange('K1').setFormula('=query(A:C,"select A, sum(B), sum(B)+sum(C) group by A order by A")');
+  processing.protect().setWarningOnly(true);
+  if (nplayers % 2) {players.splice(players.indexOf('OPEN'), 1);}
+  processing.getRange(1, 1, pllength, 4).setValues(players.map(p => [p, 0, 0, 1]));
+  processing.getRange('E1').setValue(pllength + 2);
+  processing.getRange('F1').setFormula('=query(query(K:O,"select K,L/M,L,M-L,O where not K = \'BYE\' order by N desc, L/M desc, O desc, L desc"),"where Col3+Col4>0")');
+  processing.getRange('K1').setFormula('=query(A:D,"select A, sum(B), sum(B)+sum(C), sum(D) group by A order by A")');
   var sosFormulas = [];
   for (let i=0; i<pllength+Boolean(byePlayer); i++) {
-    let rowformulas = ["=IFERROR((O"+(i+3)+"+L"+(i+3)+"-M"+(i+3)+")/(P"+(i+3)+"-M"+(i+3)+"),\"\")", "=", "="];
-    for (let j=0; j<options[3][1]; j++) {
-      rowformulas[1] += "+".repeat(j!=0) + "IFERROR(VLOOKUP(VLOOKUP(K" + (i+3) + ",'" + name + " Standings'!H2:" + (options[2][1]+1) + "," + (2*j+2) + "),K:M,2,FALSE),0)";
-      rowformulas[2] += "+".repeat(j!=0) + "IFERROR(VLOOKUP(VLOOKUP(K" + (i+3) + ",'" + name + " Standings'!H2:" + (options[2][1]+1) + "," + (2*j+2) + "),K:M,3,FALSE),0)";
+    let rowformulas = ["=IFERROR((P"+(i+3)+"+L"+(i+3)+"-M"+(i+3)+")/(Q"+(i+3)+"-M"+(i+3)+"),\"\")", "=", "="];
+    for (let j=0; j<nrounds; j++) {
+      rowformulas[1] += "+".repeat(j!=0) + "IFERROR(VLOOKUP(VLOOKUP(K" + (i+3) + ",'" + name + " Standings'!H2:" + (nplayers+1) + "," + (2*j+2) + ",FALSE),K:M,2,FALSE),0)";
+      rowformulas[2] += "+".repeat(j!=0) + "IFERROR(VLOOKUP(VLOOKUP(K" + (i+3) + ",'" + name + " Standings'!H2:" + (nplayers+1) + "," + (2*j+2) + ",FALSE),K:M,3,FALSE),0)";
     }
     sosFormulas.push(rowformulas);
   }
-  processing.getRange(3, 14, sosFormulas.length, 3).setValues(sosFormulas);
-  if (byePlayer) {
-    processing.getRange(1, 1, 2, 3).setValues([[byePlayer, options[4][1], 0], ['BYE', 0, options[4][1]]]);
-    processing.getRange('D1').setValue(3);
-  }
+  processing.getRange(3, 15, sosFormulas.length, 3).setValues(sosFormulas);
   
   //standings table copy from processing
   var table = [['Pl', 'Player', 'Win Pct','Wins', 'Losses', 'SoS']];
-  for (let i=1; i <= options[2][1]; i++) {
+  for (let i=1; i <= nplayers; i++) {
     table.push(['=if(and(C' + (i+1) + '=C' + i + ', F' + (i+1) + '=F' + i +'), "", ' + i + ')',
-     "='"+name+" Processing'!E"+(i+1), "='"+name+" Processing'!F"+(i+1),
-      "='"+name+" Processing'!G"+(i+1), "='"+name+" Processing'!H"+(i+1), "='"+name+" Processing'!I"+(i+1)]);
+     "='"+name+" Processing'!F"+(i+1), "='"+name+" Processing'!G"+(i+1),
+      "='"+name+" Processing'!H"+(i+1), "='"+name+" Processing'!I"+(i+1), "='"+name+" Processing'!J"+(i+1)]);
   }
   standings.getRange(1,1,table.length,6).setValues(table);
+
+  return true;
 }
 
 function updateRandom(num, name) {
@@ -2566,7 +3669,7 @@ function updateRandom(num, name) {
   var matches = standings.getRange(2, 8, options[2][1], 2*options[3][1]+1).getValues();
   var mlength = matches.length;
   var processing = sheet.getSheetByName(name + ' Processing');
-  var nextOpen = Number(processing.getRange('D1').getValue());
+  var nextOpen = Number(processing.getRange('E1').getValue());
   var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   var found = false;
   
@@ -2602,12 +3705,12 @@ function updateRandom(num, name) {
       standings.getRange(cell2[0], cell2[1]).setFontColor('#990000');    
     }
     processing.getRange(nextOpen, 1, 2, 3).setValues([[mostRecent[0], mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[3], mostRecent[1]]]);
-    processing.getRange('D1').setValue(nextOpen + 2);
-    sendResultToDiscord(name, 'Standings', standings.getSheetId());
+    processing.getRange('E1').setValue(nextOpen + 2);
     var results = sheet.getSheetByName('Results');
     var resultsLength = results.getDataRange().getNumRows();
     results.getRange(resultsLength, 7).setValue(name);
     results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(cell1.toString() + ',' + cell2.toString() + ',' + nextOpen);
+    sendResultToDiscord(name, 'Standings', standings.getSheetId());
   }
   
   return found;
@@ -2641,20 +3744,265 @@ function removeRandom(num, name, row) {
   return true;
 }
 
+function tiebreakRandom(num, name, players) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var standings = sheet.getSheetByName(name + ' Standings');
+  var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+
+  var ui = SpreadsheetApp.getUi();
+  var found = false;
+  var incomplete = false;
+  var tiedPlayers = [];
+  var tiedStart = null;
+
+  var standingsList = standings.getRange("B2:F").getValues();
+  var standingsLength = standingsList.length;
+  for (let i=0; i<standingsLength; i++) {
+    if (!standingsList[i][0]) {
+      break;
+    }
+    if (!incomplete && (Number(standingsList[i][2]) + Number(standingsList[i][3]) != options[3][1]*options[4][1])) {
+      incomplete = true;
+    }
+    if (!found && players.includes(standingsList[i][0])) {
+      tiedPlayers.push(standingsList[i][0]);
+      tiedStart = i;
+      let j = 1;
+      while ((i-j >= 0) && (standingsList[i-j][1] === standingsList[i][1]) && (standingsList[i-j][4] === standingsList[i][4])) {
+        tiedPlayers.unshift(standingsList[i-j][0]);
+        tiedStart = i-j;
+        j += 1;
+      }
+      j = 1;
+      while ((i+j < standingsLength) && (standingsList[i+j][1] === standingsList[i][1]) && (standingsList[i+j][4] === standingsList[i][4])) {
+        tiedPlayers.push(standingsList[i+j][0]);
+        j += 1;
+      }
+      if (tiedPlayers.length == 1) {
+        if (players.length == 1) {
+          ui.alert("The player entered was found in the " + name + " Stage but was not in a tie.", ui.ButtonSet.OK);
+        } else {
+          ui.alert("At least one listed player was found in the " + name + " Stage but was not in a tie.", ui.ButtonSet.OK);
+        }
+        return false;
+      }
+      for (p of players) {
+        if (!tiedPlayers.includes(p)) {
+          ui.alert("At least one player was found in a tie in the " + name + " Stage but not all listed players were in the same tie.", ui.ButtonSet.OK);
+          return false;
+        }
+      }
+      found = true;
+    }
+  }
+  if (!tiedPlayers.length) {
+    return false;
+  }
+
+  if (incomplete) {
+    let response = ui.alert("A tie was found with the listed player(s) in the " + name + " Stage but the stage appears to be incomplete.", "If more results are entered it may cause problems. Would you still like to apply the tiebreaker there?", ui.ButtonSet.YES_NO);
+    if (response != ui.Button.YES) {
+      return false;
+    }
+  }
+
+  for (let i=tiedPlayers.length-1; i>=0; i--) {
+    if (players.includes(tiedPlayers[i])) {
+      tiedPlayers.splice(i, 1);
+    }
+  }
+  tiedPlayers = players.concat(tiedPlayers).map((x,i) => [(i <= players.length) ? tiedStart + i + 1 : "", x]);
+  standings.getRange(tiedStart + 2, 1, tiedPlayers.length, 2).setValues(tiedPlayers);
+  ui.alert("Tiebreaker applied in the " + name + " Stage.", ui.ButtonSet.OK);
+  return true;
+}
+
+function dropRandom(num, name, player) {
+  var ui = SpreadsheetApp.getUi();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var standings = sheet.getSheetByName(name + ' Standings');
+  var matches = standings.getRange(2, 8, options[2][1], 2*options[3][1]+1).getValues();
+  var mlength = matches.length;
+  var processing = sheet.getSheetByName(name + ' Processing');
+  var replaceMatches = false;
+
+  for (let i=0; i<mlength; i++) {
+    if (matches[i][0] == player) {
+      standings.getRange(2+i, 8).setFontLine('line-through');
+      let procList = processing.getRange(1, 1, mlength, 4).getValues();
+      let dropCount = 0;
+      for (let p=0; p<mlength; p++) {
+        if (procList[p][3] == 0) {
+          dropCount += 1;
+        }
+        if (procList[p][0] == player) {
+          processing.getRange(p+1, 4).setValue(0);
+        }
+      }
+      standings.getRange(mlength + 1 - dropCount,2).setFontLine('line-through');
+      var unplayed = [];
+      var played = [];
+      for (let j=1; j<matches[i].length; j+=2) {
+        if (matches[i][j] === 'BYE') {
+          continue;
+        } else if (matches[i][j+1] === '') {
+          unplayed.push(matches[i][j]);
+          standings.getRange(2+i, 8+j).setFontLine('line-through');
+        } else {
+          played.push(matches[i][j]);
+        }
+      }
+      if (unplayed.length) {
+        replaceMatches = ui.alert("Would you like to replace the matches of their opponents who they have not played?", ui.ButtonSet.YES_NO) == ui.Button.YES;
+      }
+      if (played.length && replaceMatches) {
+        var response = ui.alert(player + " has results against opponents: " + played.join(", "), "Would you like those results to be dropped and their matches reassigned as well?", ui.ButtonSet.YES_NO);
+        if (response == ui.Button.YES) {
+          for (let j=1; j<matches[i].length; j+=2) {
+              standings.getRange(2+i, 8+j).setFontLine('line-through');
+          }
+          let results = sheet.getSheetByName('Results').getDataRange().getValues();
+          for (let r=results.length-1; r>=0; r--) {
+            if (results[r][6] == name) {
+              if (results[r][1] == player) {
+                removeResult(r+1);
+                Utilities.sleep(2000);
+                unplayed.push(results[r][3]);
+                played.splice(played.indexOf(results[r][3]), 1);
+              } else if (results[r][3] == player) {
+                removeResult(r+1);
+                Utilities.sleep(2000);
+                unplayed.push(results[r][1]);
+                played.splice(played.indexOf(results[r][1]), 1);
+              }
+            }
+            if (!played.length) {break;}
+          }
+        }
+      }
+      if (unplayed.length) {
+        var locs = Array.from({length: unplayed.length}, () => Array.from({length:2}, () => null));
+        for (let m=0; m<mlength; m++) {
+          k = unplayed.indexOf(matches[m][0]);
+          if (k>=0) {
+            locs[k] = [m, matches[m].indexOf(player)];
+            if (!replaceMatches) {
+              standings.getRange(2+locs[k][0], 8+locs[k][1]).setFontLine('line-through');
+            }
+          }
+          if (replaceMatches && (unplayed.length % 2) && matches[m].includes('BYE')) {
+            let byeIdx = matches[m].indexOf('BYE');
+            standings.getRange(2+m, 8+byeIdx).setFontColor('#990000');
+            unplayed.push(matches[m][0]);
+            locs.push([m, byeIdx]);
+          }
+        }
+        if (replaceMatches) {
+
+          function matchExists(p1, p2) {
+            if ((p1 == 'OPEN') || (p2 == 'OPEN')) {
+              return false;
+            }
+            if (matches[locs[unplayed.indexOf(p1)][0]].includes(p2)) {
+              return true;
+            }
+            return false;
+          }
+
+          if (unplayed.length % 2) {
+            unplayed.push('OPEN');
+          }
+          let assigned = [];
+          for (let p=0; p<unplayed.length; p++) {
+            if (!assigned.includes(unplayed[p])) {
+              let found = false;
+              for (let j=p+1; j<unplayed.length; j++) {
+                if (!matchExists(unplayed[p], unplayed[j])) {
+                  assigned.push(unplayed[p]);
+                  assigned.push(unplayed[j]);
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) {
+                for (let j=assigned.length-1; j>=0; j--) {
+                  if (!matchExists(unplayed[p], assigned[j])) {
+                    if (j%2) {
+                      for (let k=p+1; k<unplayed.length; k++) {
+                        if (!matchExists(assigned[j-1], unplayed[k])) {
+                          assigned.push(assigned[j-1]);
+                          assigned.push(unplayed[k]);
+                          assigned[j-1] = unplayed[p];
+                          found = true;
+                          break;
+                        }
+                      }
+                    } else {
+                      for (let k=p+1; k<unplayed.length; k++) {
+                        if (!matchExists(assigned[j+1], unplayed[k])) {
+                          assigned.push(assigned[j+1]);
+                          assigned.push(unplayed[k]);
+                          assigned[j+1] = unplayed[p];
+                          found = true;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                  if (found) {break;}
+                }
+              }
+              if (!found) {
+                ui.alert("No valid reassignment found for all unplayed matches.", ui.ButtonSet.OK);
+                return;
+              }
+            }
+          }
+          for (let m=0; m<assigned.length; m+=2) {
+            if (assigned[m] == 'OPEN') {
+              let uidx1 = unplayed.indexOf(assigned[m+1]);
+              standings.getRange(2+locs[uidx1][0], 8+locs[uidx1][1]).setValue('BYE').setFontColor('#38761d');
+              unplayed.splice(uidx1, 1);
+              locs.splice(uidx1, 1);
+            } else if (assigned[m+1] == 'OPEN') {
+              let uidx0 = unplayed.indexOf(assigned[m]);
+              standings.getRange(2+locs[uidx0][0], 8+locs[uidx0][1]).setValue('BYE').setFontColor('#38761d');
+              unplayed.splice(uidx0, 1);
+              locs.splice(uidx0, 1);
+            } else {
+              let uidx0 = unplayed.indexOf(assigned[m]);
+              standings.getRange(2+locs[uidx0][0], 8+locs[uidx0][1]).setValue(assigned[m+1]);
+              unplayed.splice(uidx0, 1);
+              locs.splice(uidx0, 1);
+              let uidx1 = unplayed.indexOf(assigned[m+1]);
+              standings.getRange(2+locs[uidx1][0], 8+locs[uidx1][1]).setValue(assigned[m]);
+              unplayed.splice(uidx1, 1);
+              locs.splice(uidx1, 1);
+            }
+          }
+        }
+      }
+      break;
+    }
+  }
+}
+
 // Groups 
 
 function groupsOptions(num, name) {
   var options = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Options');
   const base = 10*num;
 
-  options.getRange(base + 1,1,7,2).setValues([
+  options.getRange(base + 1,1,11,2).setValues([
     ["''" + name + "' Groups Options", ""],
     ["Seeding Sheet", ""],
     ["Number of Players", ""],
     ["Players per Group", ""],
     ["Grouping Method", "pool draw"],
     ["Aggregation Method", "rank then wins"],
-    ["Games per Match", ""]
+    ["Games per Match", ""],
+    ["",""],["",""],["",""],["",""]
   ]);
 
   options.getRange(base + 5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['pool draw', 'random', 'snake'], true).build());
@@ -2662,17 +4010,32 @@ function groupsOptions(num, name) {
 }
 
 function createGroups(num, name) {
+  var ui = SpreadsheetApp.getUi();
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var nplayers = Number(options[2][1]);
   var ppg = Number(options[3][1]);
+  var ngroups = Math.ceil(nplayers/ppg);
+  var gamesPerMatch = Number(options[6][1]);
+  if ((ppg < 3) || (ppg % 1)) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "Players per Group should be an integer greater than 2.", ui.ButtonSet.OK);
+    return false;
+  } else if (nplayers < ppg) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "The number of players should be at least the number of players per group.", ui.ButtonSet.OK);
+    return false;
+  } else if ((gamesPerMatch < 1) || (gamesPerMatch % 1)) {
+    ui.alert("Sheets not made for the " + name + " Stage.", "The games per match should be a positive integer.", ui.ButtonSet.OK);
+    return false;
+  }
   var standings = sheet.insertSheet(name + ' Standings');
   standings.deleteColumns(6+ppg, 21-ppg);
   standings.setColumnWidth(1, 150);
   standings.setColumnWidths(2, 4+ppg, 50);
   standings.getRange('E:E').setNumberFormat('0.000');
   var processing = sheet.insertSheet(name + ' Processing');
-  var players = Array.from({length:Number(options[2][1])}, (v,i) => "=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")");
-  var ngroups = Math.ceil(options[2][1]/ppg);
+  processing.protect().setWarningOnly(true);
+  var players = Array.from({length:nplayers}, (v,i) => "=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")");
+  
   
   //establish groups
   var groups = [];
@@ -2691,31 +4054,31 @@ function createGroups(num, name) {
       while (players.length % ppg) {players.push('OPEN'+ ++openCounter);}
   }
   var pllength = players.length;
-  processing.getRange('F1').setValue(pllength + 2);
+  processing.getRange('G1').setValue(pllength + 2);
   for (let i=0; i<pllength; i++) {
     if (Math.floor(i/ngroups) % 2) {
-      groups.push(/^OPEN\d+$/.test(players[i]) ? [players[i], '', ngroups-1-(i%ngroups), -1, 2] : [players[i], '', ngroups-1-(i%ngroups), 0, 0]);
+      groups.push([players[i], '', ngroups-1-(i%ngroups), 0, 0, /^OPEN\d+$/.test(players[i]) ? -1 : 1]);
     } else {
-      groups.push(/^OPEN\d+$/.test(players[i]) ? [players[i], '', i%ngroups, -1, 2] : [players[i], '', i%ngroups, 0, 0]); 
+      groups.push([players[i], '', i%ngroups, 0, 0, /^OPEN\d+$/.test(players[i]) ? -1 : 1]); 
     }
   }
-  processing.getRange(1, 1, groups.length, 5).setValues(groups);
-  processing.getRange('G1').setValue('=query(U:Z, "select U, V, X/' + options[6][1] + ', W, X-W, Y where not U=\'\' order by V, Y desc, Z desc")');
-  processing.getRange(2, 13, pllength, 1).setValues(Array.from({length: pllength}, (x,i) => [1+(i%ppg)]));
-  processing.getRange('U1').setFormula('=query(A:E, "select A, avg(C), sum(D), sum(D)+sum(E) where not A=\'\' group by A order by avg(C)")');
-  processing.getRange('Y2').setFormula('=arrayformula(iferror(W2:W' + (pllength + 1) + '/X2:X' + (pllength + 1) + ',0))');
+  processing.getRange(1, 1, groups.length, 6).setValues(groups);
+  processing.getRange('H1').setValue('=query(X:AD, "select X, Y, AA/' + options[6][1] + ', Z, AA-Z, AC, AB where not X=\'\' order by Y, AB desc, AC desc, AD desc")');
+  processing.getRange(2, 15, pllength, 1).setValues(Array.from({length: pllength}, (x,i) => [1+(i%ppg)]));
+  processing.getRange('X1').setFormula('=query(A:F, "select A, avg(C), sum(D), sum(D)+sum(E), sum(F) where not A=\'\' group by A order by avg(C)")');
+  processing.getRange('AC2').setFormula('=arrayformula(iferror(Z2:Z' + (pllength + 1) + '/AA2:AA' + (pllength + 1) + ',0))');
   var indScores = [];
   var tbs = [];
   for (let i=0; i<pllength; i++) {
     indScores.push([]);
     for (let j=0; j<ppg; j++) {
-      indScores[i].push('=iferror(index(query(A:E, "select sum(D) where A=\'"&U'+(i+2)+'&"\' and B=\'"&U'+(i+2+j-(i%ppg))+'&"\'"),2))');
+      indScores[i].push('=iferror(index(query(A:E, "select sum(D) where A=\'"&X'+(i+2)+'&"\' and B=\'"&X'+(i+2+j-(i%ppg))+'&"\'"),2))');
     }
-    tbs.push(['=sum(arrayformula(if(Y'+(i+2)+'=transpose(Y'+(2+ppg*Math.floor(i/ppg))+':Y'+(1+ppg*(1+Math.floor(i/ppg)))+'),\
-AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
+    tbs.push(['=sum(arrayformula(if(AC'+(i+2)+'=transpose(AC'+(2+ppg*Math.floor(i/ppg))+':AC'+(1+ppg*(1+Math.floor(i/ppg)))+'),\
+AE'+(i+2)+':'+columnFinder(30+Number(ppg))+(i+2)+',)))']);
   }
-  processing.getRange(2, 27, indScores.length, ppg).setValues(indScores);
-  processing.getRange(2, 26, tbs.length, 1).setValues(tbs);
+  processing.getRange(2, 31, indScores.length, ppg).setValues(indScores);
+  processing.getRange(2, 30, tbs.length, 1).setValues(tbs);
   
   //make standings
   var tables = [];
@@ -2729,22 +4092,22 @@ AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
       tables.push(['Player','Played','Wins','Losses','Win %'].concat(Array.from({length: ppg}, (x,j) => '=left(A' + (tables.length + j + 2) + ',3)')));
     }
     if (i % ppg == ppg-1) {
-      tables.push(["=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "G" + (i+2)+ ")",
-        "=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "I" + (i+2)+ ")",
-        "=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "J" + (i+2)+ ")",
-        "=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "K" + (i+2)+ ")",
-        "=IF(regexmatch(" + procSheet + "G" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "L" + (i+2)+ ")",
+      tables.push(["=IF(regexmatch(" + procSheet + "H" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "H" + (i+2)+ ")",
+        "=IF(regexmatch(" + procSheet + "H" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "J" + (i+2)+ ")",
+        "=IF(regexmatch(" + procSheet + "H" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "K" + (i+2)+ ")",
+        "=IF(regexmatch(" + procSheet + "H" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "L" + (i+2)+ ")",
+        "=IF(regexmatch(" + procSheet + "H" + (i+2) + ",\"^OPEN\\d+$\"),, " + procSheet + "M" + (i+2)+ ")",
       ]);
     } else {
-      tables.push(["=" + procSheet + "G" + (i+2), "=" + procSheet + "I" + (i+2), "=" + procSheet + "J" + (i+2), "=" + procSheet + "K" + (i+2), "=" + procSheet + "L" + (i+2)]);
+      tables.push(["=" + procSheet + "H" + (i+2), "=" + procSheet + "J" + (i+2), "=" + procSheet + "K" + (i+2), "=" + procSheet + "L" + (i+2), "=" + procSheet + "M" + (i+2)]);
     }
     let last = tables.length - 1;
     for (let j=0; j<ppg; j++) {
       let toprow = 2+ppg*Math.floor(i/ppg);
       let bottomrow = 1+ppg*(1+Math.floor(i/ppg));
-      tables[last].push("=iferror(index(" + procSheet + "AA" + toprow + ":" + columnFinder(26+ppg) + bottomrow + 
-        ",match(A" + (last+1) + "," + procSheet + "U" + toprow + ":U" + bottomrow +
-        ",0),match(A" + (last + 1 + j - (i%ppg)) + "," + procSheet + "U" + toprow + ":U" + bottomrow + ",0)))"
+      tables[last].push("=iferror(index(" + procSheet + "AE" + toprow + ":" + columnFinder(30+ppg) + bottomrow + 
+        ",match(A" + (last+1) + "," + procSheet + "X" + toprow + ":X" + bottomrow +
+        ",0),match(A" + (last + 1 + j - (i%ppg)) + "," + procSheet + "X" + toprow + ":X" + bottomrow + ",0)))"
       );
     }
     if (i % ppg == ppg-1) {
@@ -2753,7 +4116,8 @@ AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
     }
   }
   standings.getRange(1, 1, tables.length, 5+ppg).setValues(tables);
-  standings.deleteRows(tables.length, 1001-tables.length)
+  standings.deleteRows(tables.length, 1001-tables.length);
+  standings.protect().setUnprotectedRanges(Array.from({ length: ngroups }, (v,i) => standings.getRange(1 + i*(4+ppg), 1, 1, 5+ppg))).setWarningOnly(true);
   
   //make aggregates
   function aggFormat() {
@@ -2768,39 +4132,42 @@ AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
   }  
   switch (options[5][1]) {
     case 'wins only':
-      processing.getRange('N1').setFormula('=query(G:M, "select G,M,H,I,J,K,L where not G=\'\' order by L desc")');
-      var aggregate = sheet.insertSheet(name + ' Aggregation');      
+      processing.getRange('P1').setFormula('=query(H:O, "select H,O,I,J,K,L,M,N where not H=\'\' order by N desc, M desc")');
+      var aggregate = sheet.insertSheet(name + ' Aggregation');
+      aggregate.protect().setWarningOnly(true);
       aggregate.deleteRows(pllength + 2, 999-pllength);
       aggFormat();
       var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Played', 'Wins', 'Losses', 'Win %']];
-      for (let i=0; i<Number(options[2][1]); i++) {
+      for (let i=0; i<nplayers; i++) {
         let prIn = i+2;
-        aggTable.push([i+1, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
-          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
-          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
+        aggTable.push(['=if(H' + (i+2) + '=H' + (i+1) + ', "", ' + (i+1) + ')', "=" + procSheet + "P" + prIn, "=vlookup(B" + prIn + ", " + procSheet + "P2:Q" + (pllength + 1) + ", 2, false)",
+          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + "vlookup(B" + prIn + ", " + procSheet + "P2:R" + (pllength + 1) + ", 3, FALSE))",
+          "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn, "=" + procSheet + "U" + prIn, "=" + procSheet + "V" + prIn
         ]);
       }
       aggregate.getRange(1, 1, aggTable.length, 8).setValues(aggTable);
       break;
     case 'separate':
-      processing.getRange('N1').setFormula('=query(G:M, "select G,M,H,I,J,K,L where not G=\'\' order by M, L desc")');
-      for (let i=0; i<options[3][1]; i++) {
+      processing.getRange('P1').setFormula('=query(H:O, "select H,O,I,J,K,L,M,N where not H=\'\' order by O, N desc, M desc")');
+      for (let i=0; i<ppg; i++) {
         var aggregate = sheet.insertSheet(name + ' Aggregation ' + (i+1) + ((i==0) ? 'sts' : (i==1) ? 'nds' : (i==2) ? 'rds' : 'ths'));
+        aggregate.protect().setWarningOnly(true);
         aggregate.deleteRows(ngroups + 2, 999-ngroups);
         aggFormat();
         let aggTable = [['Seed', 'Player', 'Place', 'Group', 'Played', 'Wins', 'Losses', 'Win %']];
         for (let j=0; j<ngroups; j++) {
           let prIn = i*ngroups+j+2;
-          if (i == options[3][1]-1) {
-            let openCheckString = "=IF(regexmatch(" + procSheet + "N" + prIn + ",\"^OPEN\\d+$\"),,";
-            aggTable.push([openCheckString + (j+1) + ")", openCheckString + procSheet + "N" + prIn + ")", openCheckString + procSheet + "O" + prIn + ")",
-              openCheckString + "index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + prIn + "))",
-              openCheckString + procSheet + "Q" + prIn + ")", openCheckString + procSheet + "R" + prIn + ")", openCheckString + procSheet + "S" + prIn + ")", openCheckString + procSheet + "T" + prIn + ")"
+          if (i == ppg-1) {
+            let openCheckString = "=if(regexmatch(" + procSheet + "P" + prIn + ",\"^OPEN\\d+$\"),,";
+            aggTable.push([openCheckString + 'if(H' + (j+2) + '=H' + (j+1) + ', "", ' + (j+1) + '))',
+              openCheckString + procSheet + "P" + prIn + ")", openCheckString + "vlookup(B" + (j+2) + ", " + procSheet + "P2:Q" + (pllength + 1) + ", 2, false))",
+              openCheckString + "index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + "vlookup(B" + (j+2) + ", " + procSheet + "P2:R" + (pllength + 1) + ", 3, false)))",
+              openCheckString + procSheet + "S" + prIn + ")", openCheckString + procSheet + "T" + prIn + ")", openCheckString + procSheet + "U" + prIn + ")", openCheckString + procSheet + "V" + prIn + ")"
             ]);
           } else {
-            aggTable.push([j+1, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
-              "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
-              "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
+            aggTable.push(['=if(H' + (j+2) + '=H' + (j+1) + ', "", ' + (j+1) + ')', "=" + procSheet + "P" + prIn, "=vlookup(B" + (j+2) + ", " + procSheet + "P2:Q" + (pllength + 1) + ", 2, false)",
+              "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + "vlookup(B" + (j+2) + ", " + procSheet + "P2:R" + (pllength + 1) + ", 3, false))",
+              "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn, "=" + procSheet + "U" + prIn, "=" + procSheet + "V" + prIn
             ]);
           } 
         }
@@ -2808,28 +4175,29 @@ AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
       }
       break;
     case 'fixed':
-      processing.getRange('N1').setFormula('=query(G:M, "select G,M,H,I,J,K,L where not G=\'\' order by M, H")');
+      processing.getRange('P1').setFormula('=query(H:O, "select H,O,I,J,K,L,M,N where not H=\'\' order by O, J")');
       var aggregate = sheet.insertSheet(name + ' Aggregation');
+      aggregate.protect().setWarningOnly(true);
       aggFormat();
       aggregate.deleteRows(2+2*ngroups, 999-2*ngroups);
       var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Played', 'Wins', 'Losses', 'Win %']];
       for (let i=0; i<ngroups; i++) {
         let prIn = i+2;
-        aggTable.push([i+1, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
-          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
-          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
+        aggTable.push([i+1, "=" + procSheet + "P" + prIn, "=vlookup(B" + prIn + ", " + procSheet + "P2:Q" + (pllength + 1) + ", 2, false)",
+          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + "vlookup(B" + prIn + ", " + procSheet + "P2:R" + (pllength + 1) + ", 3, false))",
+          "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn, "=" + procSheet + "U" + prIn, "=" + procSheet + "V" + prIn
         ]);
       }
       for(let i=ngroups; i>0; i-=2) {
         let prIn = ngroups+i;
-        aggTable.push([2*ngroups+1-i, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
-          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
-          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
+        aggTable.push([2*ngroups+1-i, "=" + procSheet + "P" + prIn, "=vlookup(B" + prIn + ", " + procSheet + "P2:Q" + (pllength + 1) + ", 2, false)",
+          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + "vlookup(B" + prIn + ", " + procSheet + "P2:R" + (pllength + 1) + ", 3, false))",
+          "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn, "=" + procSheet + "U" + prIn, "=" + procSheet + "V" + prIn
         ]);
         prIn = ngroups+i+1;
-        aggTable.push([2*ngroups+2-i, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
-          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
-          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
+        aggTable.push([2*ngroups+2-i, "=" + procSheet + "P" + prIn, "=vlookup(B" + prIn + ", " + procSheet + "P2:Q" + (pllength + 1) + ", 2, false)",
+          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + "vlookup(B" + prIn + ", " + procSheet + "P2:R" + (pllength + 1) + ", 3, false))",
+          "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn, "=" + procSheet + "U" + prIn, "=" + procSheet + "V" + prIn
         ]);
       }
       aggregate.getRange(1, 1, aggTable.length, 8).setValues(aggTable);
@@ -2837,35 +4205,42 @@ AA'+(i+2)+':'+columnFinder(26+Number(ppg))+(i+2)+',)))']);
     case 'none':
       break;
     default:
-      processing.getRange('N1').setFormula('=query(G:M, "select G,M,H,I,J,K,L where not G=\'\' order by M, L desc")');
+      processing.getRange('P1').setFormula('=query(H:O, "select H,O,I,J,K,L,M,N where not H=\'\' order by N desc, O, M desc")');
       var aggregate = sheet.insertSheet(name + ' Aggregation');
+      aggregate.protect().setWarningOnly(true);
       aggregate.deleteRows(pllength + 2, 999-pllength);
       aggFormat();
       var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Played', 'Wins', 'Losses', 'Win %']];
-      for (let i=0; i<Number(options[2][1]); i++) {
+      for (let i=0; i<nplayers; i++) {
         let prIn = i+2;
-        aggTable.push([i+1, "=" + procSheet + "N" + prIn, "=" + procSheet + "O" + prIn,
-          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + procSheet + "P" + (prIn) + ")",
-          "=" + procSheet + "Q" + prIn, "=" + procSheet + "R" + prIn, "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn
+        aggTable.push(['=if(and(C' + (i+2) + '=C' + (i+1) + ', H' + (i+2) + '=H' + (i+1) + '), "", ' + (i+1) + ')',
+          "=" + procSheet + "P" + prIn, "=vlookup(B" + prIn + ", " + procSheet + "P2:Q" + (pllength + 1) + ", 2, false)",
+          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + "vlookup(B" + prIn + ", " + procSheet + "P2:R" + (pllength + 1) + ", 3, false))",
+          "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn, "=" + procSheet + "U" + prIn, "=" + procSheet + "V" + prIn
         ]);
       }
       aggregate.getRange(1, 1, aggTable.length, 8).setValues(aggTable);
   }
+
+  return true;
 }
 
 function updateGroups(num, name) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var processing = sheet.getSheetByName(name + ' Processing');
   var form = FormApp.openByUrl(sheet.getSheetByName('Administration').getDataRange().getValues()[3][1]).getResponses();
   var mostRecent = form[form.length - 1].getItemResponses().map(function(resp) {return resp.getResponse()});
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
-  var processing = sheet.getSheetByName(name + ' Processing');
-  var nextOpen = Number(processing.getRange('F1').getValue());
-  var groups = processing.getRange(1, 1, options[3][1]*Math.ceil(options[2][1]/options[3][1]), 3).getValues();
+  var ppg = Number(options[3][1]);
+  var ngroups = Math.ceil(options[2][1]/ppg);
+  var playersLength = ppg*ngroups;
+  var nextOpen = Number(processing.getRange('G1').getValue());
+  var groups = processing.getRange(1, 1, playersLength, 3).getValues();
   var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   
   if (mostRecent[0] == mostRecent[2]) {return false;}
   
-  for (let i=0; i<options[2][1]; i++) {
+  for (let i=0; i<playersLength; i++) {
     if (groups[i][0] == mostRecent[0]) {
       var p1Group = groups[i][2];
     } else if (groups[i][0] == mostRecent[2]) {
@@ -2875,12 +4250,12 @@ function updateGroups(num, name) {
   if (p1Group == p2Group) {
     if (!empty) {
       processing.getRange(nextOpen, 1, 2, 5).setValues([[mostRecent[0], mostRecent[2], p1Group, mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], p1Group, mostRecent[3], mostRecent[1]]])
-      processing.getRange('F1').setValue(nextOpen+2);
-      sendResultToDiscord(name, 'Standings',sheet.getSheetByName(name + ' Standings').getSheetId());
+      processing.getRange('G1').setValue(nextOpen+2);
       var results = sheet.getSheetByName('Results');
       var resultsLength = results.getDataRange().getNumRows();
       results.getRange(resultsLength, 7).setValue(name);
       results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(nextOpen);
+      sendResultToDiscord(name, 'Standings',sheet.getSheetByName(name + ' Standings').getSheetId());
     }
     return true;
   } else {
@@ -2899,18 +4274,256 @@ function removeGroups(num, name, row) {
   return true;
 }
 
+function tiebreakGroups(num, name, players) {
+  var ui = SpreadsheetApp.getUi();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var ppg = Number(options[3][1]);
+  var ngroups = Math.ceil(options[2][1]/ppg);
+
+  if (!["fixed", "none"].includes(options[5][1])) {
+    var response = ui.alert("Is the tie you are looking to break in the Aggregation for the " + name + " Stage?", ui.ButtonSet.YES_NO);
+    if (response == ui.Button.YES) {
+      let processing = sheet.getSheetByName(name + ' Processing');
+      let nplayers = ngroups*ppg;
+      let procList = processing.getRange(2,8,nplayers,1).getValues().flat();
+      let rankList = processing.getRange(2,15,nplayers,1).getValues().flat();
+      for (let i=0; i<nplayers; i++) {
+        if (players.includes(procList[i])) {
+          var aggregate = sheet.getSheetByName(name + ' Aggregation' + ((options[5][1] == "separate") ? ' ' + (rankList[i]) + ((rankList[i]==1) ? 'sts' : (rankList[i]==2) ? 'nds' : (rankList[i]==3) ? 'rds' : 'ths') : ''));
+          break;
+        }
+      }
+      if (!aggregate) {
+        ui.alert("None of the listed players were found in that stage. Tiebreaker not applied.", ui.ButtonSet.OK);
+        return true;
+      }
+
+      var found = false;
+      var incomplete = false;
+      var tiedPlayers = [];
+      var tiedStart = null;
+
+      var standingsList = aggregate.getRange("B2:H").getValues();
+      var standingsLength = standingsList.length;
+      for (let i=0; i<standingsLength; i++) {
+        if (!incomplete && (standingsList[i][3] != ppg-1)) {
+          incomplete = true;
+        }
+        if (!found && players.includes(standingsList[i][0])) {
+          tiedPlayers.push(standingsList[i][0]);
+          tiedStart = i;
+          let j = 1;
+          while ((i-j >= 0) && ((standingsList[i-j][1] === standingsList[i][1]) || (options[5][1] == "wins only")) && (standingsList[i-j][6] === standingsList[i][6])) {
+            tiedPlayers.unshift(standingsList[i-j][0]);
+            tiedStart = i-j;
+            j += 1;
+          }
+          j = 1;
+          while ((i+j < standingsLength) && ((standingsList[i+j][1] === standingsList[i][1]) || (options[5][1] == "wins only")) && (standingsList[i+j][6] === standingsList[i][6])) {
+            tiedPlayers.push(standingsList[i+j][0]);
+            j += 1;
+          }
+          if (tiedPlayers.length == 1) {
+            if (players.length == 1) {
+              ui.alert("The player entered is not in a tie in the " + name + " Stage Aggregation. Tiebreaker not applied.", ui.ButtonSet.OK);
+            } else {
+              ui.alert("At least one listed player is not in a tie in the " + name + " Stage Aggregation. Tiebreaker not applied.", ui.ButtonSet.OK);
+            }
+            return true;
+          }
+          for (p of players) {
+            if (!tiedPlayers.includes(p)) {
+              ui.alert("Not all listed players are in the same tie in the " + name + " Stage Aggregation. Tiebreaker not applied.", ui.ButtonSet.OK);
+              return true;
+            }
+          }
+          found = true;
+        }
+      }
+      if (incomplete) {
+        let response = ui.alert("A tie was found with the listed player(s) in the Aggregation for the  " + name + " Stage but the stage appears to be incomplete.", "If more results are entered it may cause problems. Would you still like to apply the tiebreaker there?", ui.ButtonSet.YES_NO);
+        if (response != ui.Button.YES) {
+          ui.alert("Tiebreaker not applied.", ui.ButtonSet.OK);
+          return true;
+        }
+      }
+      for (let i=tiedPlayers.length-1; i>=0; i--) {
+        if (players.includes(tiedPlayers[i])) {
+          tiedPlayers.splice(i, 1);
+        }
+      }
+      tiedPlayers = players.concat(tiedPlayers).map((x,i) => [(i <= players.length) ? tiedStart + i + 1 : "", x]);
+      aggregate.getRange(tiedStart + 2, 1, tiedPlayers.length, 2).setValues(tiedPlayers);
+      ui.alert("Tiebreaker applied in the Aggregation for the " + name + " Stage.", ui.ButtonSet.OK);
+      return true;
+    }
+  }
+
+  var processing = sheet.getSheetByName(name + ' Processing');
+  var standings = sheet.getSheetByName(name + ' Standings');
+  var incomplete = false;
+  var tiedPlayers = [];
+  var tiedIndex = null;
+  var tiedStart = null;
+  var groupNumber = null;
+
+  var procList = processing.getRange(2, 8, ngroups*ppg, 8).getValues();
+  var procLength = procList.length;
+  for (let i=0; i<procLength; i++) {
+    if (players.includes(procList[i][0])) {
+      tiedPlayers.push(procList[i][0]);
+      tiedIndex = i;
+      tiedStart = Number(procList[i][7]);
+      groupNumber = procList[i][1];
+      let j = 1;
+      while ((i-j >= 0) && (procList[i-j][1] === groupNumber)) {
+        if ((procList[i-j][5] === procList[i][5]) && !/^OPEN/.test(procList[i+j][0])) {
+          tiedPlayers.unshift(procList[i-j][0]);
+          tiedIndex = i-j;
+          tiedStart = Math.min(tiedStart, Number(procList[i-j][7]));
+        }
+        if (procList[i-j][2] != ppg-1) {
+          incomplete = true;
+        }
+        j += 1
+      }
+      j = 1;
+      while ((i+j < procLength) && (procList[i+j][1] === groupNumber)) {
+        if ((procList[i+j][5] === procList[i][5]) && !/^OPEN/.test(procList[i+j][0])) {
+          tiedPlayers.push(procList[i+j][0]);
+          tiedStart = Math.min(tiedStart, Number(procList[i+j][7]));
+        }
+        if (procList[i+j][2] != ppg-1) {
+          incomplete = true;
+        }
+        j += 1
+      }
+      if (tiedPlayers.length == 1) {
+        if (players.length == 1) {
+          ui.alert("The player entered was found in the " + name + " Stage but was not in a tie.", ui.ButtonSet.OK);
+        } else {
+          ui.alert("At least one listed player was found in the " + name + " Stage but was not in a tie.", ui.ButtonSet.OK);
+        }
+        return false;
+      }
+      for (p of players) {
+        if (!tiedPlayers.includes(p)) {
+          ui.alert("At least one player was found in a tie in the " + name + " Stage but not all listed players were in the same tie.", ui.ButtonSet.OK);
+          return false;
+        }
+      }
+      break;
+    }
+  }
+  if (!tiedPlayers.length) {
+    return false;
+  }
+  if (incomplete) {
+    let response = ui.alert("A tie was found with the listed player(s) in the " + name + " Stage but their group appears to be incomplete.", "If more results are entered it may cause problems. Would you still like to apply the tiebreaker there?", ui.ButtonSet.YES_NO);
+    if (response != ui.Button.YES) {
+      return false;
+    }
+  }
+  var rankReplace = Array.from({length: tiedPlayers.length}, () => 0);
+  for (let i=0; i<players.length; i++) {
+    rankReplace[tiedPlayers.indexOf(players[i])] = [tiedStart + i];
+  }
+  let fillin = tiedStart + players.length;
+  for (let i=0; i<rankReplace.length; i++) {
+    if (rankReplace[i] == 0) {
+      rankReplace[i] = [fillin];
+      fillin += 1;
+    }
+  }
+  processing.getRange(tiedIndex + 2, 15, rankReplace.length, 1).setValues(rankReplace);
+
+  for (let i=tiedPlayers.length-1; i>=0; i--) {
+    if (players.includes(tiedPlayers[i])) {
+      tiedPlayers.splice(i, 1);
+    }
+  }
+  tiedPlayers = players.concat(tiedPlayers).map(x => [x]);
+  standings.getRange((4+ppg)*groupNumber + 2 + tiedStart, 1, tiedPlayers.length, 1).setValues(tiedPlayers);
+  ui.alert("Tiebreaker applied in the " + name + " Stage.", ui.ButtonSet.OK);
+  return true;
+}
+
+function dropGroups(num, name, player) {
+  var ui = SpreadsheetApp.getUi();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var ppg = Number(options[3][1]);
+  var ngroups = Math.ceil(options[2][1]/ppg);
+  var playersLength = ppg*ngroups;
+  var processing = sheet.getSheetByName(name + ' Processing');
+  var standings = sheet.getSheetByName(name + ' Standings');
+  var groups = processing.getRange(1, 1, playersLength, 6).getValues();
+  
+  var dropCounts = {};
+  for (let i=0; i<ngroups; i++) {
+    dropCounts[i] = 0;
+  }
+  for (let i=0; i<playersLength; i++) {
+    if (groups[i][5] <= 0) {
+      dropCounts[groups[i][2]] += 1;
+    } else if (groups[i][0] == player) {
+      processing.getRange(i+1, 6).setValue(0);
+      var playerGroup = Number(groups[i][2]);
+    }
+  }
+
+  var procList = processing.getRange(2, 8, playersLength, 3).getValues();
+  for (let i=0; i<playersLength; i++) {
+    if ((procList[i][0] == player) && (procList[i][2] > 0)) {
+      let response = ui.alert(player + " has played games in the " + name + " Stage.", "Would you like to remove those results?", ui.ButtonSet.YES_NO);
+      if (response == ui.Button.YES) {
+        let results = sheet.getSheetByName('Results').getDataRange().getValues();
+        for (let r=results.length-1; r>=0; r--) {
+          if (results[r][6] == name) {
+            if ((results[r][1] == player) || (results[r][3] == player)) {
+              removeResult(r+1);
+              Utilities.sleep(2000);
+            }
+          }
+        }
+      }
+      break;
+    }
+  }
+
+  standings.getRange(playerGroup*(4 + ppg) + 2 + ppg - dropCounts[playerGroup], 1).setFontLine('line-through');
+  standings.getRange(playerGroup*(4 + ppg) + 2, 5 + ppg - dropCounts[playerGroup]).setFontLine('line-through');
+
+  switch (options[5][1]) {
+    case "separate":
+      let playerPlace = ppg - dropCounts[playerGroup];
+      let placeDrops = 0;
+      for (g in dropCounts) {placeDrops += (dropCounts[g] > dropCounts[playerGroup]);}
+      sheet.getSheetByName(name + " Aggregation " + playerPlace + ((playerPlace==1) ? 'sts' : (playerPlace==2) ? 'nds' : (playerPlace==3) ? 'rds' : 'ths')).getRange(ngroups + 1 - placeDrops, 2).setFontLine('line-through');
+      break;
+    case "wins only":
+    case "rank then wins":
+      let totalDrops = 0;
+      for (g in dropCounts) {totalDrops += dropCounts[g];}
+      sheet.getSheetByName(name + " Aggregation").getRange(playersLength + 1 - totalDrops, 2).setFontLine('line-through');
+      break;
+  }
+}
+
 // Barrage
 
 function barrageOptions(num, name) {
   var options = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Options');
   const base = 10*num;
 
-  options.getRange(base + 1,1,5,2).setValues([
+  options.getRange(base + 1,1,11,2).setValues([
     ["''" + name + "' Barrage Options", ""],
     ["Seeding Sheet", ""],
     ["Number of Players", ""],
     ["Grouping Method", "pool draw"],
-    ["Games to Win", ""]
+    ["Games to Win", ""],
+    ["",""],["",""],["",""],["",""],["",""],["",""]
   ]);
 
   options.getRange(base + 4,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['pool draw', 'random', 'snake'], true).build());
@@ -2924,9 +4537,9 @@ function createBarrage(num, name) {
 
   if (nplayers % 4) {
     let ui = SpreadsheetApp.getUi();
-    let response = ui.alert("Warning: the number of players specified for the " + name + " stage is not a multiple of 4", "Barrage stages work bset with multiples of 4. Would you still like to proceed?", ui.ButtonSet.YES_NO);
+    let response = ui.alert("Warning: the number of players specified for the " + name + " stage is not a multiple of 4", "Barrage stages work best with multiples of 4. Would you still like to proceed?", ui.ButtonSet.YES_NO);
     if (response != ui.Button.YES) {
-      return;
+      return false;
     }
     for (let i = Number(options[2][1]) % 4; i<4; i++) {
       players.push("BYE");
@@ -2935,6 +4548,7 @@ function createBarrage(num, name) {
 
   var ngroups = players.length/4;
   var matches = sheet.insertSheet(name + " Matches");
+  matches.protect().setWarningOnly(true);
   matches.deleteColumns(16, 11);
   matches.deleteRows(10*ngroups, 1001-10*ngroups);
   matches.getRange(matches.getMaxRows(), matches.getMaxColumns()).setFontColor("#FFFFFF").setValue("~");
@@ -3004,6 +4618,7 @@ function createBarrage(num, name) {
   }
 
   var places = sheet.insertSheet(name + " Places");
+  places.protect().setWarningOnly(true);
   places.deleteColumns(3,24);
   places.setColumnWidth(1,40);
   places.setColumnWidth(2,150);
@@ -3014,6 +4629,8 @@ function createBarrage(num, name) {
     places.getRange(2+i*ngroups, 1, ngroups, 1).merge();
   }
   places.deleteRows(nplayers + 2, 999-nplayers);
+
+  return true;
 }
 
 function updateBarrage(num, name) {
@@ -3023,6 +4640,7 @@ function updateBarrage(num, name) {
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
   var ngroups = Math.ceil(Number(options[2][1])/4);
   var byecount = 4 - Number(options[2][1]) % 4;
+  var gamesToWin = Number(options[4][1]);
   var matches = sheet.getSheetByName(name + " Matches");
   var places = sheet.getSheetByName(name + " Places");
   var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
@@ -3066,11 +4684,11 @@ function updateBarrage(num, name) {
         switch(j) {
           case 0:
             matches.getRange(3+base, 3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-            if ((topwins >= Number(options[4][1])) && (topwins > bottomwins)) {
+            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
               matches.getRange(3+base, 2, 1, 2).setBackground('#D9EBD3');
               matches.getRange(3+base, 6).setValue(match[j][0][0]);
               matches.getRange(7+base, 6).setValue(match[j][1][0]);
-            } else if ((bottomwins >= Number(options[4][1])) && (bottomwins > topwins)) {
+            } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
               matches.getRange(4+base, 2, 1, 2).setBackground('#D9EBD3');
               matches.getRange(3+base, 6).setValue(match[j][1][0]);
               matches.getRange(7+base, 6).setValue(match[j][0][0]);
@@ -3078,7 +4696,7 @@ function updateBarrage(num, name) {
             break;
           case 1:
             matches.getRange(7+base, 3, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-            if ((topwins >= Number(options[4][1])) && (topwins > bottomwins)) {
+            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
               matches.getRange(7+base, 2, 1, 2).setBackground('#D9EBD3');
               matches.getRange(4+base, 6).setValue(match[j][0][0]);
               matches.getRange(8+base, 6).setValue(match[j][1][0]);
@@ -3086,7 +4704,7 @@ function updateBarrage(num, name) {
                 matches.getRange(8+base, 6, 1, 2).setBackground('#D9EBD3');
                 matches.getRange(6+base, 10).setValue(match[j][1][0]);
               }
-            } else if ((bottomwins >= Number(options[4][1])) && (bottomwins > topwins)) {
+            } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
               matches.getRange(8+base, 2, 1, 2).setBackground('#D9EBD3');
               matches.getRange(4+base, 6).setValue(match[j][1][0]);
               matches.getRange(8+base, 6).setValue(match[j][0][0]);
@@ -3098,7 +4716,7 @@ function updateBarrage(num, name) {
             break;
           case 2:
             matches.getRange(3+base, 7, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-            if ((topwins >= Number(options[4][1])) && (topwins > bottomwins)) {
+            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
               matches.getRange(3+base, 6, 1, 2).setBackground('#D9EBD3');
               matches.getRange(4+base, 14).setValue(match[j][0][0]);
               places.getRange(2+i, 2).setValue(match[j][0][0]);
@@ -3112,12 +4730,12 @@ function updateBarrage(num, name) {
             break;
           case 3:
             matches.getRange(7+base, 7, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-            if ((topwins >= Number(options[4][1])) && (topwins > bottomwins)) {
+            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
               matches.getRange(7+base, 6, 1, 2).setBackground('#D9EBD3');
               matches.getRange(6+base, 10).setValue(match[j][0][0]);
               matches.getRange(7+base, 14).setValue(match[j][1][0]);
               places.getRange(2+3*ngroups+i-byecount, 2).setValue(match[j][1][0]);
-            } else if ((bottomwins >= Number(options[4][1])) && (bottomwins > topwins)) {
+            } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
               matches.getRange(8+base, 6, 1, 2).setBackground('#D9EBD3');
               matches.getRange(6+base, 10).setValue(match[j][1][0]);
               matches.getRange(7+base, 14).setValue(match[j][0][0]);
@@ -3126,13 +4744,13 @@ function updateBarrage(num, name) {
             break;
           case 4:
             matches.getRange(5+base, 11, 2, 1).setValues(((topwins == 0) && (bottomwins == 0)) ? [[''],['']] : [[topwins],[bottomwins]]);
-            if ((topwins >= Number(options[4][1])) && (topwins > bottomwins)) {
+            if ((topwins >= gamesToWin) && (topwins > bottomwins)) {
               matches.getRange(5+base, 10, 1, 2).setBackground('#D9EBD3');
               matches.getRange(5+base, 14).setValue(match[j][0][0]);
               places.getRange(2+ngroups+i, 2).setValue(match[j][0][0]);
               matches.getRange(6+base, 14).setValue(match[j][1][0]);
               places.getRange(2+2*ngroups+i, 2).setValue(match[j][1][0]);
-            } else if ((bottomwins >= Number(options[4][1])) && (bottomwins > topwins)) {
+            } else if ((bottomwins >= gamesToWin) && (bottomwins > topwins)) {
               matches.getRange(6+base, 10, 1, 2).setBackground('#D9EBD3');
               matches.getRange(5+base, 14).setValue(match[j][1][0]);
               places.getRange(2+ngroups+i, 2).setValue(match[j][1][0]);
@@ -3148,11 +4766,11 @@ function updateBarrage(num, name) {
   }
 
   if (found && !empty) {
-    sendResultToDiscord(name, 'Results', matches.getSheetId());
     var results = sheet.getSheetByName('Results');
     var resultsLength = results.getDataRange().getNumRows();
     results.getRange(resultsLength, 7).setValue(name);
     results.getRange(resultsLength, 8).setFontColor('#ffffff').setValue(loc);
+    sendResultToDiscord(name, 'Results', matches.getSheetId());
   }
 
   return found;
@@ -3271,4 +4889,137 @@ function removeBarrage(num, name, row) {
   }
   results.getRange(row, 7, 1, 2).setValues([['','removed']]).setFontColor(null);
   return true;
+}
+
+function dropBarrage(num, name, player) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
+  var ngroups = Math.ceil(Number(options[2][1])/4);
+  var byecount = 4 - Number(options[2][1]) % 4;
+  var matches = sheet.getSheetByName(name + " Matches");
+  var places = sheet.getSheetByName(name + " Places");
+  var found = false;
+
+  for (let i=0; i<ngroups; i++) {
+    var base = 10*i;
+    var match = [
+      matches.getRange(3+base, 2, 2, 2).getValues(),
+      matches.getRange(7+base, 2, 2, 2).getValues(),
+      matches.getRange(3+base, 6, 2, 2).getValues(),
+      matches.getRange(7+base, 6, 2, 2).getValues(),
+      matches.getRange(5+base, 10, 2, 2).getValues(),
+    ];
+    for (let j=0; j<5; j++) {
+      switch (j) {
+        case 0:
+          if (match[2][0][0]) {continue;}
+          break;
+        case 1:
+          if (match[2][1][0]) {continue;}
+          break;
+        case 2:
+          if (match[4][0][0]) {continue;}
+          break;
+        case 3:
+          if (match[4][1][0]) {continue;}
+          break;
+      }
+      if ((match[j][0][0] == player) || (match[j][1][0] == player)) {
+        found = true;
+        var bottom = (match[j][1][0] == player);
+      }
+      if (found) {
+        switch(j) {
+          case 0:
+            if (bottom) {
+              matches.getRange(3+base, 2, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(4+base, 2).setFontLine('line-through');
+              matches.getRange(3+base, 6).setValue(match[j][0][0]);
+            } else {
+              matches.getRange(3+base, 2).setFontLine('line-through');
+              matches.getRange(4+base, 2, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(3+base, 6).setValue(match[j][1][0]);
+            }
+            matches.getRange(7+base, 6).setFontLine('line-through').setValue(' ');
+            matches.getRange(6+base, 10).setValue('=indirect("R' + (8+base) + 'C6", false)');
+            matches.getRange(7+base, 14).setFontLine('line-through').setValue(player);
+            places.getRange(2+3*ngroups+i-byecount, 2).setFontLine('line-through').setValue(player);
+            break;
+          case 1:
+            if (bottom) {
+              matches.getRange(7+base, 2, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(8+base, 2).setFontLine('line-through');
+              matches.getRange(4+base, 6).setValue(match[j][0][0]);
+            } else {
+              matches.getRange(7+base, 2).setFontLine('line-through');
+              matches.getRange(8+base, 2, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(4+base, 6).setValue(match[j][1][0]);
+            }
+            matches.getRange(8+base, 6).setFontLine('line-through').setValue(' ');
+            if (match[3][0][0] == "BYE") {
+              matches.getRange(6+base, 10).setFontLine('line-through').setValue(' ');
+              matches.getRange(6+base, 14).setFontLine('line-through').setValue(player);
+              places.getRange(2+2*ngroups+i, 2).setFontLine('line-through').setValue(player);
+              matches.getRange(5+base, 14).setValue('=indirect("R' + (5+base) + 'C10", false)');
+              places.getRange(2+ngroups+i, 2).setValue('=indirect("' + name + ' Matches!R' + (5+base) + 'C10", false)');
+            } else {
+              matches.getRange(6+base, 10).setValue('=indirect("R' + (7+base) + 'C6", false)');
+              matches.getRange(7+base, 14).setFontLine('line-through').setValue(player);
+              places.getRange(2+3*ngroups+i-byecount, 2).setFontLine('line-through').setValue(player);
+            }
+            break;
+          case 2:
+            if (bottom) {
+              matches.getRange(3+base, 6, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(4+base, 6).setFontLine('line-through');
+              matches.getRange(4+base, 14).setValue('=indirect("R' + (3+base) + 'C6", false)');
+              places.getRange(2+i, 2).setValue('=indirect("' + name + ' Matches!R' + (3+base) + 'C6", false)');
+            } else {
+              matches.getRange(3+base, 6).setFontLine('line-through');
+              matches.getRange(4+base, 6, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(4+base, 14).setValue('=indirect("R' + (4+base) + 'C6", false)');
+              places.getRange(2+i, 2).setValue('=indirect("' + name + ' Matches!R' + (4+base) + 'C6", false)');
+            }
+            matches.getRange(5+base, 10).setFontLine('line-through').setValue(' ');
+            matches.getRange(6+base, 14).setFontLine('line-through').setValue(player);
+            places.getRange(2+2*ngroups+i, 2).setFontLine('line-through').setValue(player);
+            matches.getRange(5+base, 14).setValue('=indirect("R' + (6+base) + 'C10", false)');
+            places.getRange(2+ngroups+i, 2).setValue('=indirect("' + name + ' Matches!R' + (6+base) + 'C10", false)');
+            break;
+          case 3:
+            if (bottom) {
+              matches.getRange(7+base, 6, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(8+base, 6).setFontLine('line-through');
+              matches.getRange(6+base, 10).setValue('=indirect("R' + (7+base) + 'C6", false)');
+            } else {
+              matches.getRange(7+base, 6).setFontLine('line-through');
+              matches.getRange(8+base, 6, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(6+base, 10).setValue('=indirect("R' + (8+base) + 'C6", false)');
+            }
+            matches.getRange(7+base, 14).setFontLine('line-through').setValue(player);
+            places.getRange(2+3*ngroups+i-byecount, 2).setFontLine('line-through').setValue(player);
+            break;
+          case 4:
+            if (bottom) {
+              matches.getRange(5+base, 10, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(6+base, 10).setFontLine('line-through');
+              matches.getRange(5+base, 14).setValue('=indirect("R' + (5+base) + 'C10", false)');
+              places.getRange(2+ngroups+i, 2).setValue('=indirect("' + name + ' Matches!R' + (5+base) + 'C10", false)');
+              matches.getRange(6+base, 14).setFontLine('line-through').setValue(player);
+              places.getRange(2+2*ngroups+i, 2).setFontLine('line-through').setValue(player);
+            } else {
+              matches.getRange(5+base, 10).setFontLine('line-through');
+              matches.getRange(6+base, 10, 1, 2).setBackground('#D9EBD3');
+              matches.getRange(5+base, 14).setValue('=indirect("R' + (6+base) + 'C10", false)');
+              places.getRange(2+ngroups+i, 2).setValue('=indirect("' + name + ' Matches!R' + (6+base) + 'C10", false)');
+              matches.getRange(6+base, 14).setFontLine('line-through').setValue(player);
+              places.getRange(2+2*ngroups+i, 2).setFontLine('line-through').setValue(player);
+            }
+            break;
+        }
+        break;
+      }
+    }
+    if (found) {break;}
+  }
 }
