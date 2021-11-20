@@ -190,7 +190,7 @@ function makeSheets() {
         removeStage(stageList[i][0], stageList[i][1]);
         let success = addStage(i, stageList[i][0], stageList[i][1]);
         if (success) {
-          admin.getRange(8+i, 5).setValue('=countif(Results!G2:G, A' + (8+i) + ')');
+          admin.getRange(8+i, 5).setValue('=countif(Results!G:G, A' + (8+i) + ')');
           remade.push(stageList[i][0]);
         }
       }
@@ -206,7 +206,7 @@ function makeSheets() {
     removeStage(stageName, stageType);
     var success = addStage(stageNumber, stageName, stageType);
     if (success) {
-      admin.getRange(8+stageNumber, 5).setValue('=countif(Results!G2:G, A' + (8+stageNumber) + ')');
+      admin.getRange(8+stageNumber, 5).setValue('=countif(Results!G:G, A' + (8+stageNumber) + ')');
     }
   }
   
@@ -4239,15 +4239,18 @@ function updateGroups(num, name) {
   var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   
   if (mostRecent[0] == mostRecent[2]) {return false;}
-  
+  var p1Group = null;
+  var p2Group = null;
+
   for (let i=0; i<playersLength; i++) {
     if (groups[i][0] == mostRecent[0]) {
-      var p1Group = groups[i][2];
+      p1Group = groups[i][2];
     } else if (groups[i][0] == mostRecent[2]) {
-      var p2Group = groups[i][2];
+      p2Group = groups[i][2];
     }
   }
-  if (p1Group == p2Group) {
+
+  if ((p1Group !== null) && (p1Group == p2Group)) {
     if (!empty) {
       processing.getRange(nextOpen, 1, 2, 5).setValues([[mostRecent[0], mostRecent[2], p1Group, mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], p1Group, mostRecent[3], mostRecent[1]]])
       processing.getRange('G1').setValue(nextOpen+2);
