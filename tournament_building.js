@@ -52,7 +52,7 @@ function setupInitial() {
   admin.getRange('B3:B4').protect().setWarningOnly(true);
   const prefill = "https://docs.google.com/forms/d/e/1FAIpQLSfZGOHcw0YhIsWD_dROOlvNdI8FBN9wuC-s7bitd31Ie1Xh1w/viewform?entry.1566745465=";
   let info = [['Tournament Name', sheet.getName(), '', '', ''],
-              ['Published Spreadsheet', "https://docs.google.com/spreadsheet/pub?key=" + sheet.getId(), '=hyperlink("' + prefill + '"&B2, "Shortened:")', '', ''],
+              ['Published Spreadsheet', "https://docs.google.com/spreadsheets/d/" + sheet.getId() + "/pubhtml", '=hyperlink("' + prefill + '"&B2, "Shortened:")', '', ''],
               ['Signup Form', signupForm ? signupForm : 'none', signupForm ? '=hyperlink("' + prefill + '"&B3, "Shortened:")' : '', '', ''],
               ['Results Form', formURL, '=hyperlink("' + prefill + '"&B4, "Shortened:")', '', ''],
               ['Discord Webhook', '', '=hyperlink("https://www.google.com/search?q=color+picker", "Color Hex:")', '', ''],
