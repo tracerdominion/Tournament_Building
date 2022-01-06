@@ -94,7 +94,7 @@ function addNamesToResults() {
   }
 
   var nameSheet = sheet.getSheetByName(response.getResponseText());
-  var names = nameSheet.getRange(2, 2, nameSheet.getLastRow()-1, 1).getValues().flat();
+  var names = nameSheet.getRange(2, 2, nameSheet.getLastRow()-1, 1).getValues().flat().map(n => n.trim());
   names.sort((a,b) => lowerSort(a,b));
 
   var resultsForm = FormApp.openByUrl(sheet.getSheetByName("Administration").getRange(4,2).getValue().replace(/viewform$/, "edit"));
@@ -445,7 +445,7 @@ function dropPlayer() {
   for (let i=stageList.length-1; i>=0; i--) {
     if ((stageList[i][2]) && (!stageList[i][3])) {
       let seedInfo = options.getRange(10*i+2, 2, 2, 1).getValues().flat();
-      let playerList = sheet.getSheetByName(seedInfo[0]).getRange(2, 2, seedInfo[1], 1).getValues().flat();
+      let playerList = sheet.getSheetByName(seedInfo[0]).getRange(2, 2, seedInfo[1], 1).getValues().flat().map(n => n.trim());
       if (playerList.includes(player)) {
         dropFrom.push([i, stageList[i][0], stageList[i][1]]);
       }
@@ -873,17 +873,17 @@ function createSingleBracket(num, name) {
     function placeSeeds(seed, b, location, roundsLeft) {    
       if (seedList[b][2**nround - seed]) {
         if (seedMethod != 'random') {bracket.getRange(b*bracketSize + location, 1).setValue(seedList[b][seed-1]);}
-        bracket.getRange(b*bracketSize + location, 2).setFormula("=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[b][seed-1] + 1) + ")");
+        bracket.getRange(b*bracketSize + location, 2).setFormula("=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[b][seed-1] + 1) + "))");
         if (seedMethod != 'random') {bracket.getRange(b*bracketSize + location + 1, 1).setValue(seedList[b][2**nround - seed]);}
-        bracket.getRange(b*bracketSize + location + 1, 2).setFormula("=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[b][2**nround - seed] + 1) + ")");
+        bracket.getRange(b*bracketSize + location + 1, 2).setFormula("=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[b][2**nround - seed] + 1) + "))");
       } else {
         bracket.getRange(b*bracketSize + location, 2, 2, 2).setBorder(false, false, false, false, null, null);
         if ((location - 2) % 8) {
           if (seedMethod != 'random') {bracket.getRange(b*bracketSize + location - 1, 3).setValue(seedList[b][seed-1]);}
-          bracket.getRange(b*bracketSize + location - 1, 4).setFormula("=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[b][seed-1] + 1) + ")");        
+          bracket.getRange(b*bracketSize + location - 1, 4).setFormula("=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[b][seed-1] + 1) + "))");        
         } else {
           if (seedMethod != 'random') {bracket.getRange(b*bracketSize + location + 2, 3).setValue(seedList[b][seed-1]);}
-          bracket.getRange(b*bracketSize + location + 2, 4).setFormula("=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[b][seed-1] + 1) + ")");        
+          bracket.getRange(b*bracketSize + location + 2, 4).setFormula("=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[b][seed-1] + 1) + "))");        
         }      
       }
       
@@ -1626,18 +1626,18 @@ function createDoubleBracket(num, name) {
   function placeSeeds(seed, location, roundsLeft) {    
     if (2**nround + 1 - seed <= nplayers) {
       if (seedMethod != 'random') {bracket.getRange(location, 1).setValue(seedList[seed-1]);}
-      bracket.getRange(location, 2).setFormula("=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[seed-1] + 1) + ")");
+      bracket.getRange(location, 2).setFormula("=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[seed-1] + 1) + "))");
       if (seedMethod != 'random') {bracket.getRange(location + 1, 1).setValue(seedList[2**nround - seed]);}
-      bracket.getRange(location + 1, 2).setFormula("=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[2**nround - seed] + 1) + ")");
+      bracket.getRange(location + 1, 2).setFormula("=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[2**nround - seed] + 1) + "))");
     } else {
       bracket.getRange(location, 2, 2, 2).setBorder(false, false, false, false, null, null);
       bracket.getRange(location-1,2).setValue('');
       if ((location - 2) % 8) {
         if (seedMethod != 'random') {bracket.getRange(location - 1, 3).setValue(seedList[seed-1]);}
-        bracket.getRange(location - 1, 4).setFormula("=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[seed-1] + 1) + ")");        
+        bracket.getRange(location - 1, 4).setFormula("=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[seed-1] + 1) + "))");        
       } else {
         if (seedMethod != 'random') {bracket.getRange(location + 2, 3).setValue(seedList[seed-1]);}
-        bracket.getRange(location + 2, 4).setFormula("=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[seed-1] + 1) + ")");        
+        bracket.getRange(location + 2, 4).setFormula("=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (seedList[seed-1] + 1) + "))");        
       }      
     }
     
@@ -2940,7 +2940,7 @@ function createSwiss(num, name) {
   swiss.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=ISBLANK(B1)').setFontColor('#FFFFFF').setRanges([swiss.getRange('A:A')]).build()]);
   var processing = sheet.insertSheet(name + ' Processing');
   processing.protect().setWarningOnly(true);
-  var players = Array.from({length:nplayers}, (v,i) => "=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")");
+  var players = Array.from({length:nplayers}, (v,i) => "=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + "))");
   
   //processing sheet
   processing.getRange(1,1,nplayers, 6).setValues(players.map((p,i) => [p, '', 0, 0, i+1, 1]));
@@ -3478,11 +3478,11 @@ function createRandom(num, name) {
   standings.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=ISBLANK(B1)').setFontColor('#FFFFFF').setRanges([standings.getRange('A:A')]).build()]);
   if (options[1][1]) {
     var playerNames = sheet.getSheetByName(options[1][1]).getRange("B2:B" + (nplayers + 1)).getValues().flat();
-    var players = Array.from({length:nplayers}, (v,i) => ["=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")", playerNames[i]]);
+    var players = Array.from({length:nplayers}, (v,i) => ["=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + "))", playerNames[i]]);
     players.sort((a,b) => lowerSort(a[1], b[1]));
     players = players.map(x => x[0]);
   } else {
-    var players = Array.from({length:nplayers}, (v,i) => "=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")");
+    var players = Array.from({length:nplayers}, (v,i) => "=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + "))");
   }
   
   if (nplayers % 2) {players.push('OPEN');}
@@ -4034,7 +4034,7 @@ function createGroups(num, name) {
   standings.getRange('E:E').setNumberFormat('0.000');
   var processing = sheet.insertSheet(name + ' Processing');
   processing.protect().setWarningOnly(true);
-  var players = Array.from({length:nplayers}, (v,i) => "=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")");
+  var players = Array.from({length:nplayers}, (v,i) => "=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + "))");
   
   
   //establish groups
@@ -4239,18 +4239,18 @@ function updateGroups(num, name) {
   var empty = (mostRecent[1] == 0) && (mostRecent[3] == 0);
   
   if (mostRecent[0] == mostRecent[2]) {return false;}
-  var p1Group = null;
-  var p2Group = null;
+  var found = false;
 
   for (let i=0; i<playersLength; i++) {
     if (groups[i][0] == mostRecent[0]) {
-      p1Group = groups[i][2];
+      var p1Group = groups[i][2];
+      found = true;
     } else if (groups[i][0] == mostRecent[2]) {
-      p2Group = groups[i][2];
+      var p2Group = groups[i][2];
     }
   }
 
-  if ((p1Group !== null) && (p1Group == p2Group)) {
+  if (found && (p1Group == p2Group)) {
     if (!empty) {
       processing.getRange(nextOpen, 1, 2, 5).setValues([[mostRecent[0], mostRecent[2], p1Group, mostRecent[1], mostRecent[3]], [mostRecent[2], mostRecent[0], p1Group, mostRecent[3], mostRecent[1]]])
       processing.getRange('G1').setValue(nextOpen+2);
@@ -4536,7 +4536,7 @@ function createBarrage(num, name) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var options = sheet.getSheetByName('Options').getRange(num*10 + 1,1,10,2).getValues();
   var nplayers = Number(options[2][1])
-  var players = Array.from({length:nplayers}, (v,i) => "=index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + ")");
+  var players = Array.from({length:nplayers}, (v,i) => "=trim(index(indirect(Options!B" + (2+10*num) + "&\"!B:B\")," + (i+2) + "))");
 
   if (nplayers % 4) {
     let ui = SpreadsheetApp.getUi();
