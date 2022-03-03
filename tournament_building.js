@@ -4005,8 +4005,8 @@ function groupsOptions(num, name) {
     ["",""],["",""],["",""],["",""]
   ]);
 
-  options.getRange(base + 5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['pool draw', 'random', 'snake'], true).build());
-  options.getRange(base + 6,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['rank then wins', 'separate', 'fixed', 'wins only', 'none'], true).build());
+  options.getRange(base + 5,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['pool draw', 'random', 'snake', 'assigned'], true).build());
+  options.getRange(base + 6,2).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['rank then wins', 'separate', 'fixed', 'rank then group', 'wins only', 'none'], true).build());
 }
 
 function createGroups(num, name) {
@@ -4050,16 +4050,27 @@ function createGroups(num, name) {
       for (let i=0; i<ppg; i++) {
         shuffle(players, ngroups*i, ngroups*(i+1)-1);
       }
+      break;
+    case 'assigned':
+      let nopen = ngroups * ppg - nplayers;
+      while (openCounter < nopen) {players.splice(nplayers - openCounter * (ppg-1), 0, 'OPEN'+ ++openCounter);}
+      break;
     default:
       while (players.length % ppg) {players.push('OPEN'+ ++openCounter);}
   }
   var pllength = players.length;
   processing.getRange('G1').setValue(pllength + 2);
-  for (let i=0; i<pllength; i++) {
-    if (Math.floor(i/ngroups) % 2) {
-      groups.push([players[i], '', ngroups-1-(i%ngroups), 0, 0, /^OPEN\d+$/.test(players[i]) ? -1 : 1]);
-    } else {
-      groups.push([players[i], '', i%ngroups, 0, 0, /^OPEN\d+$/.test(players[i]) ? -1 : 1]); 
+  if (options[4][1] == 'assigned') {
+    for (let i=0; i<pllength; i++) {
+      groups.push([players[i], '', Math.floor(i/ppg), 0, 0, /^OPEN\d+$/.test(players[i]) ? -1 : 1]);
+    }
+  } else {
+    for (let i=0; i<pllength; i++) {
+      if (Math.floor(i/ngroups) % 2) {
+        groups.push([players[i], '', ngroups-1-(i%ngroups), 0, 0, /^OPEN\d+$/.test(players[i]) ? -1 : 1]);
+      } else {
+        groups.push([players[i], '', i%ngroups, 0, 0, /^OPEN\d+$/.test(players[i]) ? -1 : 1]); 
+      }
     }
   }
   processing.getRange(1, 1, groups.length, 6).setValues(groups);
@@ -4196,6 +4207,23 @@ AE'+(i+2)+':'+columnFinder(30+Number(ppg))+(i+2)+',)))']);
         ]);
         prIn = ngroups+i+1;
         aggTable.push([2*ngroups+2-i, "=" + procSheet + "P" + prIn, "=vlookup(B" + prIn + ", " + procSheet + "P2:Q" + (pllength + 1) + ", 2, false)",
+          "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + "vlookup(B" + prIn + ", " + procSheet + "P2:R" + (pllength + 1) + ", 3, false))",
+          "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn, "=" + procSheet + "U" + prIn, "=" + procSheet + "V" + prIn
+        ]);
+      }
+      aggregate.getRange(1, 1, aggTable.length, 8).setValues(aggTable);
+      break;
+    case 'rank then group':
+      processing.getRange('P1').setFormula('=query(H:O, "select H,O,I,J,K,L,M,N where not H=\'\' order by N desc, O, I")');
+      var aggregate = sheet.insertSheet(name + ' Aggregation');
+      aggregate.protect().setWarningOnly(true);
+      aggregate.deleteRows(pllength + 2, 999-pllength);
+      aggFormat();
+      var aggTable = [['Seed', 'Player', 'Place', 'Group', 'Played', 'Wins', 'Losses', 'Win %']];
+      for (let i=0; i<nplayers; i++) {
+        let prIn = i+2;
+        aggTable.push(['=if(and(C' + (i+2) + '=C' + (i+1) + ', D' + (i+2) + '=D' + (i+1) + '), "", ' + (i+1) + ')',
+          "=" + procSheet + "P" + prIn, "=vlookup(B" + prIn + ", " + procSheet + "P2:Q" + (pllength + 1) + ", 2, false)",
           "=index('" + name + " Standings'!A:A, 1+" + (4 + ppg) + "*" + "vlookup(B" + prIn + ", " + procSheet + "P2:R" + (pllength + 1) + ", 3, false))",
           "=" + procSheet + "S" + prIn, "=" + procSheet + "T" + prIn, "=" + procSheet + "U" + prIn, "=" + procSheet + "V" + prIn
         ]);
