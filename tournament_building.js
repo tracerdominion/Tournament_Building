@@ -4074,7 +4074,7 @@ function createGroups(num, name) {
     }
   }
   processing.getRange(1, 1, groups.length, 6).setValues(groups);
-  processing.getRange('H1').setValue('=query(X:AD, "select X, Y, AA/' + options[6][1] + ', Z, AA-Z, AC, AB where not X=\'\' order by Y, AB desc, AC desc, AD desc")');
+  processing.getRange('H1').setValue('=query(X:AD, "select X, Y, AA/' + options[6][1] + ', Z, AA-Z, AC, AB where not X=\'\' order by Y, AB desc, AC desc, AD desc, AA desc")');
   processing.getRange(2, 15, pllength, 1).setValues(Array.from({length: pllength}, (x,i) => [1+(i%ppg)]));
   processing.getRange('X1').setFormula('=query(A:F, "select A, avg(C), sum(D), sum(D)+sum(E), sum(F) where not A=\'\' group by A order by avg(C)")');
   processing.getRange('AC2').setFormula('=arrayformula(iferror(Z2:Z' + (pllength + 1) + '/AA2:AA' + (pllength + 1) + ',0))');
